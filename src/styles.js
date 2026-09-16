@@ -30,6 +30,7 @@ export const S = {
     justifyContent: "space-between",
     gap: 8,
     padding: "14px 16px",
+    paddingTop: "calc(14px + env(safe-area-inset-top))",
     background: C.surface,
     borderBottom: `1px solid ${C.border}`,
     position: "sticky",

@@ -16,6 +16,7 @@ import {
   supabase,
 } from "./supabase.js";
 import { buildExerciseLibrary, uid } from "./utils.js";
+import { useEdgeSwipeBack, useNavStack } from "./nav.js";
 
 import Auth from "./screens/Auth.jsx";
 import Home from "./screens/Home.jsx";
@@ -32,7 +33,7 @@ export default function App() {
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
-  const [route, setRoute] = useState({ screen: "home" });
+  const { route, go, back, home, lastPop } = useNavStack();
   const [banner, setBanner] = useState(null);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -81,8 +82,7 @@ export default function App() {
     setTimeout(() => setBanner(null), 4500);
   }
 
-  const go = (screen, params = {}) => setRoute({ screen, ...params });
-  const home = () => setRoute({ screen: "home" });
+  useEdgeSwipeBack(back, lastPop);
 
   // ── Gates ──────────────────────────────────────────────────────────────────
   if (!authReady) return <Splash text="…" />;
@@ -254,7 +254,7 @@ export default function App() {
           draft={data.drafts[workout.id] || null}
           onSaveDraft={(state) => handleSaveDraft(workout.id, state)}
           onFinish={finishSession}
-          onBack={home}
+          onBack={back}
         />
       );
 
@@ -265,7 +265,7 @@ export default function App() {
           workoutName={workout?.name || "History"}
           onSaveSession={updateSession}
           onDeleteSession={removeSession}
-          onBack={home}
+          onBack={back}
         />
       );
 
@@ -278,7 +278,7 @@ export default function App() {
           allExerciseNames={allExerciseNames}
           onSave={persistWorkout}
           onDelete={removeWorkout}
-          onBack={home}
+          onBack={back}
         />
       );
 
@@ -294,7 +294,7 @@ export default function App() {
               flash(e.message || "Could not save schemes.", "error");
             }
           }}
-          onBack={home}
+          onBack={back}
         />
       );
 
@@ -311,7 +311,7 @@ export default function App() {
               flash(e.message || "Could not save templates.", "error");
             }
           }}
-          onBack={home}
+          onBack={back}
         />
       );
 
@@ -320,7 +320,7 @@ export default function App() {
         <LibraryList
           library={library}
           onSelect={(name) => go("exercise", { exerciseName: name })}
-          onBack={home}
+          onBack={back}
         />
       );
 
@@ -329,7 +329,7 @@ export default function App() {
         <ExerciseDetail
           name={route.exerciseName}
           entries={library[route.exerciseName] || []}
-          onBack={() => go("library")}
+          onBack={back}
         />
       );
 

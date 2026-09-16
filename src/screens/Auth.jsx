@@ -32,7 +32,7 @@ export default function Auth() {
   }
 
   return (
-    <div style={{ ...S.screen, maxWidth: 380, paddingTop: 64 }}>
+    <div style={{ ...S.screen, maxWidth: 380, paddingTop: "calc(64px + env(safe-area-inset-top))" }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <div style={{ ...S.logo, fontSize: 28 }}>
           IRON<span style={{ color: C.accent }}>LOG</span>
