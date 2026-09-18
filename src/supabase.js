@@ -116,17 +116,24 @@ export const DEFAULT_TEMPLATES = [
 // ── Loading ──────────────────────────────────────────────────────────────────
 
 export async function loadAll(userId) {
-  const [schemes, templates, workouts, sessions, drafts] = await Promise.all([
+  const [schemes, templates, workouts, sessions, drafts, settings, pauses] = await Promise.all([
     supabase.from("schemes").select("*").order("sort_order"),
     supabase.from("exercise_templates").select("*").order("sort_order"),
     supabase.from("workouts").select("*").order("sort_order"),
     supabase.from("sessions").select("*").order("performed_at", { ascending: false }),
     supabase.from("drafts").select("*"),
+    supabase.from("settings").select("*").maybeSingle(),
+    supabase.from("pauses").select("*").order("start_date", { ascending: false }),
   ]);
 
   const firstError =
     schemes.error || templates.error || workouts.error || sessions.error || drafts.error;
   if (firstError) throw firstError;
+
+  // settings and pauses arrive with migration 002; treat them as optional so an
+  // un-migrated database still loads rather than showing an error screen
+  const settingsRow = settings.error ? null : settings.data;
+  const pauseRows = pauses.error ? [] : pauses.data || [];
 
   let schemeRows = schemes.data || [];
   let templateRows = templates.data || [];
@@ -151,7 +158,47 @@ export async function loadAll(userId) {
     workouts: workouts.data || [],
     sessions: sessions.data || [],
     drafts: draftMap,
+    weeklyTarget: settingsRow?.weekly_target ?? null,
+    pauses: pauseRows,
   };
+}
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+export async function saveWeeklyTarget(userId, weeklyTarget) {
+  const { error } = await supabase
+    .from("settings")
+    .upsert({ user_id: userId, weekly_target: weeklyTarget }, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
+// ── Pauses ───────────────────────────────────────────────────────────────────
+
+export async function savePause(userId, pause) {
+  const row = {
+    user_id: userId,
+    id: pause.id || uid(),
+    start_date: pause.start_date,
+    end_date: pause.end_date,
+    reason: pause.reason || "other",
+    notes: pause.notes || "",
+  };
+  const { data, error } = await supabase
+    .from("pauses")
+    .upsert(row, { onConflict: "user_id,id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deletePause(userId, pauseId) {
+  const { error } = await supabase
+    .from("pauses")
+    .delete()
+    .eq("user_id", userId)
+    .eq("id", pauseId);
+  if (error) throw error;
 }
 
 async function seedDefaults(userId) {

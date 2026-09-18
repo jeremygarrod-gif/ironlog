@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, S } from "../styles.js";
-import { signIn, signUp, sendPasswordReset } from "../supabase.js";
+import { signIn, signInWithGoogle, signUp, sendPasswordReset } from "../supabase.js";
 
 export default function Auth() {
   const [mode, setMode] = useState("signin"); // signin | signup | reset
@@ -43,6 +43,44 @@ export default function Auth() {
             : mode === "reset"
             ? "We'll email you a reset link."
             : "Sign in to your training log."}
+        </div>
+      </div>
+
+      <div style={{ padding: "0 20px" }}>
+        <button
+          type="button"
+          onClick={async () => {
+            setMsg(null);
+            try {
+              await signInWithGoogle();
+            } catch (err) {
+              setMsg({ tone: "error", text: friendly(err) });
+            }
+          }}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            background: "#fff",
+            color: "#1f1f1f",
+            fontWeight: 600,
+            fontSize: 14,
+            padding: "11px 16px",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          <GoogleMark />
+          Continue with Google
+        </button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0" }}>
+          <div style={{ flex: 1, height: 1, background: C.border }} />
+          <span style={{ color: C.muted, fontSize: 11, fontFamily: C.mono, letterSpacing: 1 }}>OR</span>
+          <div style={{ flex: 1, height: 1, background: C.border }} />
         </div>
       </div>
 
@@ -108,6 +146,17 @@ export default function Auth() {
   );
 }
 
+function GoogleMark() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.8-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l-.1.3 6.5 5 .5.1c4.2-3.8 6.6-9.5 6.6-15.7z"/>
+      <path fill="#34A853" d="M24 46c5.9 0 10.9-1.9 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-.3 .1-6.8 5.2-.1.3C7.9 41 15.4 46 24 46z"/>
+      <path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.8-2.9-.8-4.4s.3-3 .7-4.4v-.3l-6.9-5.3-.2.1C2.9 16.9 2 20.3 2 24s.9 7.1 2.4 10.2l7.1-5.8z"/>
+      <path fill="#EA4335" d="M24 10.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.3 29.9 2 24 2 15.4 2 7.9 7 4.3 13.8l7.1 5.8c1.9-5.3 6.8-9.1 12.6-9.1z"/>
+    </svg>
+  );
+}
+
 const linkBtn = {
   background: "none",
   border: "none",
@@ -123,5 +172,7 @@ function friendly(err) {
   if (m.includes("invalid login")) return "Wrong email or password.";
   if (m.includes("already registered")) return "That email already has an account — sign in instead.";
   if (m.includes("rate limit")) return "Too many attempts. Wait a minute and try again.";
+  if (m.includes("provider") && m.includes("not enabled"))
+    return "Google sign-in isn't switched on yet. Use email and password for now.";
   return err?.message || "Something went wrong.";
 }

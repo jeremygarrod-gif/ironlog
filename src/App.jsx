@@ -9,14 +9,18 @@ import {
   loadAll,
   saveDraft,
   saveSchemes,
+  savePause,
+  deletePause,
   saveSession,
   saveTemplates,
+  saveWeeklyTarget,
   saveWorkout,
   signOut,
   supabase,
 } from "./supabase.js";
 import { buildExerciseLibrary, uid } from "./utils.js";
 import { useEdgeSwipeBack, useNavStack } from "./nav.js";
+import { computeAchievements, computeStreaks } from "./achievements.js";
 
 import Auth from "./screens/Auth.jsx";
 import Home from "./screens/Home.jsx";
@@ -25,6 +29,8 @@ import History from "./screens/History.jsx";
 import EditWorkout from "./screens/EditWorkout.jsx";
 import { Schemes, Templates } from "./screens/Manage.jsx";
 import { LibraryList, ExerciseDetail } from "./screens/Library.jsx";
+import Celebrate from "./screens/Celebrate.jsx";
+import Goals from "./screens/Goals.jsx";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -35,6 +41,7 @@ export default function App() {
 
   const { route, go, back, home, lastPop } = useNavStack();
   const [banner, setBanner] = useState(null);
+  const [celebration, setCelebration] = useState(null);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -67,6 +74,17 @@ export default function App() {
 
   const library = useMemo(
     () => (data ? buildExerciseLibrary(data.sessions) : {}),
+    [data]
+  );
+
+  const streaks = useMemo(
+    () =>
+      data
+        ? computeStreaks(data.sessions, data.workouts, {
+            weeklyTarget: data.weeklyTarget,
+            pauses: data.pauses,
+          })
+        : null,
     [data]
   );
 
@@ -137,8 +155,18 @@ export default function App() {
         );
         return { ...d, sessions, drafts };
       });
+      const nextSessions = [saved, ...data.sessions.filter((s) => s.id !== saved.id)].sort(
+        (a, b) => new Date(b.performed_at) - new Date(a.performed_at)
+      );
+      const { achievements } = computeAchievements({
+        sessions: nextSessions,
+        workouts: data.workouts,
+        savedSession: saved,
+        weeklyTarget: data.weeklyTarget,
+        pauses: data.pauses,
+      });
       home();
-      flash("Session saved.");
+      setCelebration(achievements);
     } catch (e) {
       flash(e.message || "Could not save the session.", "error");
     }
@@ -315,6 +343,46 @@ export default function App() {
         />
       );
 
+    case "goals":
+      return (
+        <Goals
+          weeklyTarget={data.weeklyTarget}
+          workoutCount={data.workouts.length}
+          pauses={data.pauses}
+          streaks={streaks}
+          onSaveTarget={async (n) => {
+            setData((d) => ({ ...d, weeklyTarget: n }));
+            try {
+              await saveWeeklyTarget(userId, n);
+            } catch (e) {
+              flash(e.message || "Could not save your goal.", "error");
+            }
+          }}
+          onSavePause={async (p) => {
+            try {
+              const saved = await savePause(userId, p);
+              setData((d) => ({
+                ...d,
+                pauses: [saved, ...d.pauses.filter((x) => x.id !== saved.id)].sort((a, b) =>
+                  a.start_date < b.start_date ? 1 : -1
+                ),
+              }));
+            } catch (e) {
+              flash(e.message || "Could not save the pause.", "error");
+            }
+          }}
+          onDeletePause={async (id) => {
+            try {
+              await deletePause(userId, id);
+              setData((d) => ({ ...d, pauses: d.pauses.filter((p) => p.id !== id) }));
+            } catch (e) {
+              flash(e.message || "Could not remove the pause.", "error");
+            }
+          }}
+          onBack={back}
+        />
+      );
+
     case "library":
       return (
         <LibraryList
@@ -335,6 +403,10 @@ export default function App() {
 
     default:
       return (
+        <>
+          {celebration && (
+            <Celebrate achievements={celebration} onDone={() => setCelebration(null)} />
+          )}
         <Home
           workouts={data.workouts}
           drafts={data.drafts}
@@ -345,7 +417,9 @@ export default function App() {
           onImportFile={importFile}
           onSignOut={signOut}
           banner={banner}
+          streaks={streaks}
         />
+        </>
       );
   }
 }
