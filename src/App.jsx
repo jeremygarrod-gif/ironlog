@@ -12,6 +12,7 @@ import {
   savePause,
   deletePause,
   renameExercise,
+  deleteExercise,
   saveSession,
   saveTemplates,
   saveWeeklyTarget,
@@ -233,6 +234,24 @@ export default function App() {
     }
   }
 
+  async function deleteExerciseEverywhere(name) {
+    try {
+      const { changedWorkouts, changedSessions } = await deleteExercise(userId, name, {
+        workouts: data.workouts,
+        sessions: data.sessions,
+      });
+      setData((d) => ({
+        ...d,
+        workouts: d.workouts.map((w) => changedWorkouts.find((c) => c.id === w.id) || w),
+        sessions: d.sessions.map((s) => changedSessions.find((c) => c.id === s.id) || s),
+      }));
+      back();
+      flash(`Removed "${name}" from your library.`);
+    } catch (e) {
+      flash(e.message || "Could not remove that exercise.", "error");
+    }
+  }
+
   async function removeWorkout(id) {
     try {
       await deleteWorkout(userId, id);
@@ -417,6 +436,7 @@ export default function App() {
           name={route.exerciseName}
           entries={library[route.exerciseName] || []}
           onRename={(newName) => renameExerciseEverywhere(route.exerciseName, newName)}
+          onDelete={() => deleteExerciseEverywhere(route.exerciseName)}
           onBack={back}
         />
       );

@@ -360,6 +360,52 @@ export async function renameExercise(userId, oldName, newName, { workouts, sessi
   return { changedWorkouts, changedSessions };
 }
 
+// ── Remove an exercise everywhere ───────────────────────────────────────────
+// Strips this exercise out of every workout and past session that logged it.
+// The workouts and sessions themselves are kept — only the one exercise entry
+// is removed from each.
+
+export async function deleteExercise(userId, name, { workouts, sessions }) {
+  const stripped = (exercises) => (exercises || []).filter((e) => e.name !== name);
+
+  const changedWorkouts = workouts
+    .filter((w) => (w.exercises || []).some((e) => e.name === name))
+    .map((w) => ({ ...w, exercises: stripped(w.exercises) }));
+
+  const changedSessions = sessions
+    .filter((s) => (s.exercises || []).some((e) => e.name === name))
+    .map((s) => ({ ...s, exercises: stripped(s.exercises) }));
+
+  if (changedWorkouts.length) {
+    const rows = changedWorkouts.map((w) => ({
+      id: w.id,
+      user_id: userId,
+      name: w.name,
+      exercises: w.exercises,
+      notes: w.notes || "",
+      sort_order: w.sort_order ?? 0,
+    }));
+    const { error } = await supabase.from("workouts").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  if (changedSessions.length) {
+    const rows = changedSessions.map((s) => ({
+      id: s.id,
+      user_id: userId,
+      workout_id: s.workout_id,
+      workout_name: s.workout_name,
+      performed_at: s.performed_at,
+      notes: s.notes || "",
+      exercises: s.exercises,
+    }));
+    const { error } = await supabase.from("sessions").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  return { changedWorkouts, changedSessions };
+}
+
 // ── Drafts ───────────────────────────────────────────────────────────────────
 
 export async function saveDraft(userId, workoutId, state) {

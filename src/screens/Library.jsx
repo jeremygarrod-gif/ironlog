@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { C, S, toneColor } from "../styles.js";
 import { fmtDate, fmtPct, pctOffTop, repColor } from "../utils.js";
+import { Confirm } from "../components.jsx";
 
 export function LibraryList({ library, onSelect, onBack }) {
   const names = Object.keys(library).sort();
@@ -34,9 +35,10 @@ export function LibraryList({ library, onSelect, onBack }) {
   );
 }
 
-export function ExerciseDetail({ name, entries, onRename, onBack }) {
+export function ExerciseDetail({ name, entries, onRename, onDelete, onBack }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
+  const [confirming, setConfirming] = useState(false);
 
   function save() {
     const trimmed = draft.trim();
@@ -48,6 +50,9 @@ export function ExerciseDetail({ name, entries, onRename, onBack }) {
     onRename(trimmed);
   }
 
+  const sessionPhrase =
+    entries.length > 0 ? ` and ${entries.length} logged session${entries.length === 1 ? "" : "s"}` : "";
+
   return (
     <div style={S.screen}>
       <div style={S.header}>
@@ -55,11 +60,13 @@ export function ExerciseDetail({ name, entries, onRename, onBack }) {
           ← Back
         </button>
         <span style={S.headerTitle}>{editing ? "Rename exercise" : name}</span>
-        {editing ? (
-          <span style={{ width: 40 }} />
-        ) : (
+        <span style={{ width: 40 }} />
+      </div>
+
+      {!editing && !confirming && (
+        <div style={{ display: "flex", gap: 8, padding: "0 16px 14px" }}>
           <button
-            style={S.btnXs}
+            style={{ ...S.btnGhost, flex: 1 }}
             onClick={() => {
               setDraft(name);
               setEditing(true);
@@ -67,11 +74,17 @@ export function ExerciseDetail({ name, entries, onRename, onBack }) {
           >
             Rename
           </button>
-        )}
-      </div>
+          <button
+            style={{ ...S.btnGhost, flex: 1, color: C.danger, borderColor: C.danger }}
+            onClick={() => setConfirming(true)}
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
       {editing && (
-        <div style={{ padding: "14px 16px" }}>
+        <div style={{ padding: "0 16px 14px" }}>
           <input
             style={S.textInput}
             value={draft}
@@ -96,6 +109,17 @@ export function ExerciseDetail({ name, entries, onRename, onBack }) {
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {confirming && (
+        <div style={{ padding: "0 16px 14px" }}>
+          <Confirm
+            message={`Delete "${name}"? Removes it from any workout that uses it${sessionPhrase}. Everything else in those sessions is kept.`}
+            confirmLabel="Delete exercise"
+            onConfirm={() => onDelete(name)}
+            onCancel={() => setConfirming(false)}
+          />
         </div>
       )}
 
