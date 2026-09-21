@@ -11,6 +11,7 @@ import {
   saveSchemes,
   savePause,
   deletePause,
+  renameExercise,
   saveSession,
   saveTemplates,
   saveWeeklyTarget,
@@ -214,6 +215,24 @@ export default function App() {
     }
   }
 
+  async function renameExerciseEverywhere(oldName, newName) {
+    try {
+      const { changedWorkouts, changedSessions } = await renameExercise(userId, oldName, newName, {
+        workouts: data.workouts,
+        sessions: data.sessions,
+      });
+      setData((d) => ({
+        ...d,
+        workouts: d.workouts.map((w) => changedWorkouts.find((c) => c.id === w.id) || w),
+        sessions: d.sessions.map((s) => changedSessions.find((c) => c.id === s.id) || s),
+      }));
+      back();
+      flash(`Renamed to "${newName}".`);
+    } catch (e) {
+      flash(e.message || "Could not rename that exercise.", "error");
+    }
+  }
+
   async function removeWorkout(id) {
     try {
       await deleteWorkout(userId, id);
@@ -397,6 +416,7 @@ export default function App() {
         <ExerciseDetail
           name={route.exerciseName}
           entries={library[route.exerciseName] || []}
+          onRename={(newName) => renameExerciseEverywhere(route.exerciseName, newName)}
           onBack={back}
         />
       );

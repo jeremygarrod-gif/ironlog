@@ -312,6 +312,54 @@ export async function deleteSession(userId, sessionId) {
   if (error) throw error;
 }
 
+// ── Rename an exercise everywhere ───────────────────────────────────────────
+// Exercise names are free text stored on each workout and each historical
+// session rather than a lookup table, so renaming one only in the workout
+// would split its history in two. This rewrites every row that mentions the
+// old name so PBs, streaks and the library stay attached to the new one.
+
+export async function renameExercise(userId, oldName, newName, { workouts, sessions }) {
+  const renamed = (exercises) =>
+    (exercises || []).map((e) => (e.name === oldName ? { ...e, name: newName } : e));
+
+  const changedWorkouts = workouts
+    .filter((w) => (w.exercises || []).some((e) => e.name === oldName))
+    .map((w) => ({ ...w, exercises: renamed(w.exercises) }));
+
+  const changedSessions = sessions
+    .filter((s) => (s.exercises || []).some((e) => e.name === oldName))
+    .map((s) => ({ ...s, exercises: renamed(s.exercises) }));
+
+  if (changedWorkouts.length) {
+    const rows = changedWorkouts.map((w) => ({
+      id: w.id,
+      user_id: userId,
+      name: w.name,
+      exercises: w.exercises,
+      notes: w.notes || "",
+      sort_order: w.sort_order ?? 0,
+    }));
+    const { error } = await supabase.from("workouts").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  if (changedSessions.length) {
+    const rows = changedSessions.map((s) => ({
+      id: s.id,
+      user_id: userId,
+      workout_id: s.workout_id,
+      workout_name: s.workout_name,
+      performed_at: s.performed_at,
+      notes: s.notes || "",
+      exercises: s.exercises,
+    }));
+    const { error } = await supabase.from("sessions").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  return { changedWorkouts, changedSessions };
+}
+
 // ── Drafts ───────────────────────────────────────────────────────────────────
 
 export async function saveDraft(userId, workoutId, state) {

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { C, S, toneColor } from "../styles.js";
 import { fmtDate, fmtPct, pctOffTop, repColor } from "../utils.js";
 
@@ -33,16 +34,70 @@ export function LibraryList({ library, onSelect, onBack }) {
   );
 }
 
-export function ExerciseDetail({ name, entries, onBack }) {
+export function ExerciseDetail({ name, entries, onRename, onBack }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+
+  function save() {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === name) {
+      setEditing(false);
+      setDraft(name);
+      return;
+    }
+    onRename(trimmed);
+  }
+
   return (
     <div style={S.screen}>
       <div style={S.header}>
         <button style={S.btnBack} onClick={onBack}>
           ← Back
         </button>
-        <span style={S.headerTitle}>{name}</span>
-        <span style={{ width: 40 }} />
+        <span style={S.headerTitle}>{editing ? "Rename exercise" : name}</span>
+        {editing ? (
+          <span style={{ width: 40 }} />
+        ) : (
+          <button
+            style={S.btnXs}
+            onClick={() => {
+              setDraft(name);
+              setEditing(true);
+            }}
+          >
+            Rename
+          </button>
+        )}
       </div>
+
+      {editing && (
+        <div style={{ padding: "14px 16px" }}>
+          <input
+            style={S.textInput}
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <div style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>
+            Updates the name across {entries.length} logged session{entries.length === 1 ? "" : "s"} and
+            any workout that uses it.
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button style={{ ...S.btnPrimary, flex: 1 }} disabled={!draft.trim()} onClick={save}>
+              Save
+            </button>
+            <button
+              style={{ ...S.btnGhost, flex: 1 }}
+              onClick={() => {
+                setEditing(false);
+                setDraft(name);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {entries.length === 0 ? (
         <div style={S.empty}>No history yet.</div>
