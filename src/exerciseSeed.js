@@ -3,6 +3,8 @@
 // alongside anything already in the user's own history, so a brand new
 // account isn't starting from an empty dropdown.
 
+export const CATEGORY_NAMES = ["Legs", "Chest", "Shoulders", "Back", "Biceps", "Triceps"];
+
 export const EXERCISE_CATEGORIES = [
   {
     category: "Legs",

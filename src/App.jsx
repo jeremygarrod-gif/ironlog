@@ -97,6 +97,15 @@ export default function App() {
     return [...names].sort();
   }, [data, library]);
 
+  // Body part chosen for a custom exercise, set once anywhere and remembered
+  // everywhere that name shows up in the picker
+  const exerciseCategories = useMemo(() => {
+    const map = {};
+    if (!data) return map;
+    for (const w of data.workouts) for (const e of w.exercises || []) if (e.name && e.category) map[e.name] = e.category;
+    return map;
+  }, [data]);
+
   function flash(text, tone = "ok") {
     setBanner({ text, tone });
     setTimeout(() => setBanner(null), 4500);
@@ -342,6 +351,7 @@ export default function App() {
           schemes={data.schemes}
           templates={data.templates}
           allExerciseNames={allExerciseNames}
+          exerciseCategories={exerciseCategories}
           onSave={persistWorkout}
           onDelete={removeWorkout}
           onBack={back}
