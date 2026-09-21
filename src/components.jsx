@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { C, S } from "./styles.js";
 import { normRange } from "./utils.js";
+import { EXERCISE_CATEGORIES } from "./exerciseSeed.js";
 
 export function Field({ label, children }) {
   return (
@@ -130,12 +131,23 @@ export function Modal({ title, body, children }) {
 }
 
 // Text input that suggests names already used elsewhere, so the same lift
-// doesn't end up tracked under two spellings.
+// doesn't end up tracked under two spellings. Suggestions are grouped by
+// muscle group from the bundled starter list, plus anything from the user's
+// own history that isn't already in it.
 export function ExerciseNameInput({ value, onChange, allNames }) {
   const [open, setOpen] = useState(false);
   const query = (value || "").toLowerCase();
-  const matches = allNames.filter((n) => n.toLowerCase().includes(query) && n !== value);
-  const list = value === "" ? allNames : matches;
+
+  const seedNames = new Set(EXERCISE_CATEGORIES.flatMap((g) => g.exercises));
+  const extras = allNames.filter((n) => !seedNames.has(n)).sort((a, b) => a.localeCompare(b));
+  const groups = extras.length ? [...EXERCISE_CATEGORIES, { category: "Other", exercises: extras }] : EXERCISE_CATEGORIES;
+
+  const list = groups
+    .map((g) => ({
+      category: g.category,
+      exercises: g.exercises.filter((n) => n.toLowerCase().includes(query) && n !== value),
+    }))
+    .filter((g) => g.exercises.length > 0);
 
   return (
     <div style={{ position: "relative" }}>
@@ -161,35 +173,55 @@ export function ExerciseNameInput({ value, onChange, allNames }) {
             border: `1px solid ${C.border}`,
             borderRadius: 6,
             zIndex: 60,
-            maxHeight: 220,
+            maxHeight: 260,
             overflowY: "auto",
             marginTop: 2,
             boxShadow: "0 6px 20px rgba(0,0,0,0.5)",
           }}
         >
-          {list.map((name) => (
-            <button
-              key={name}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "11px 12px",
-                background: "none",
-                border: "none",
-                borderBottom: `1px solid ${C.border}`,
-                color: C.text,
-                cursor: "pointer",
-                fontSize: 14,
-                font: "inherit",
-              }}
-              onMouseDown={() => {
-                onChange(name);
-                setOpen(false);
-              }}
-            >
-              {name}
-            </button>
+          {list.map((g) => (
+            <div key={g.category}>
+              <div
+                style={{
+                  position: "sticky",
+                  top: 0,
+                  padding: "6px 12px",
+                  background: C.sunken,
+                  color: C.muted,
+                  fontFamily: C.mono,
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                  textTransform: "uppercase",
+                  borderBottom: `1px solid ${C.border}`,
+                }}
+              >
+                {g.category}
+              </div>
+              {g.exercises.map((name) => (
+                <button
+                  key={name}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "11px 12px",
+                    background: "none",
+                    border: "none",
+                    borderBottom: `1px solid ${C.border}`,
+                    color: C.text,
+                    cursor: "pointer",
+                    fontSize: 14,
+                    font: "inherit",
+                  }}
+                  onMouseDown={() => {
+                    onChange(name);
+                    setOpen(false);
+                  }}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}
