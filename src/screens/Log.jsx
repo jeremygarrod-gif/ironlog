@@ -109,6 +109,7 @@ export function buildExerciseState(exDef, schemes, sessions, workoutId) {
   return {
     key: exDef.id || uid(),
     name: exDef.name,
+    cue: exDef.cue || "",
     schemeId: exDef.schemeId,
     topSetInput: String(topWt),
     topSetWeight: topWt,
@@ -517,6 +518,20 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
 
       {ex.expanded && (
         <div style={S.exBody}>
+          {ex.cue && (
+            <div
+              style={{
+                color: C.muted,
+                fontSize: 12,
+                lineHeight: 1.5,
+                margin: "-4px 0 10px",
+                paddingLeft: 9,
+                borderLeft: `2px solid ${C.border}`,
+              }}
+            >
+              {ex.cue}
+            </div>
+          )}
           {ex.lastAny && (
             <LastSession
               data={ex.lastAny}

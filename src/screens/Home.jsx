@@ -69,7 +69,13 @@ export default function Home({
                 <span style={{ color: C.accent, fontSize: 12, fontFamily: C.mono }}>complete</span>
               )}
               {streaks.weekPaused && !streaks.weekComplete && (
-                <span style={{ color: C.warn, fontSize: 12, fontFamily: C.mono }}>paused</span>
+                <span style={{ color: C.warn, fontSize: 12, fontFamily: C.mono }}>
+                  {streaks.weekPauseReason === "calibration"
+                    ? "calibration week"
+                    : streaks.weekPauseReason === "deload"
+                    ? "deload week"
+                    : "paused"}
+                </span>
               )}
               <button
                 style={{ ...S.btnXs, marginLeft: "auto" }}

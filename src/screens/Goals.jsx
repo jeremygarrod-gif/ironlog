@@ -294,133 +294,174 @@ export default function Goals({
           </div>
         )}
 
-        {pauses.map((p) => (
-          <div key={p.id} style={S.card}>
-            {confirmId === p.id ? (
-              <Confirm
-                message="Remove this pause? Weeks it covered may break a streak."
-                confirmLabel="Remove"
-                onConfirm={() => {
-                  setConfirmId(null);
-                  onDeletePause(p.id);
-                }}
-                onCancel={() => setConfirmId(null)}
-              />
-            ) : (
-              <>
-                <div style={S.cardRow}>
-                  <div>
-                    <span
+        {(() => {
+          // The form edits in place when changing an existing pause, and sits
+          // at the bottom when adding a new one
+          const editingId = draft && pauses.some((p) => p.id === draft.id) ? draft.id : null;
+
+          const form = draft && (
+            <div style={{ ...S.card, borderColor: C.accent }}>
+              <Field label="Reason">
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {REASONS.map((r) => (
+                    <button
+                      key={r.id}
                       style={{
-                        ...S.setBadge,
-                        color: C.warn,
-                        background: "#2a2010",
+                        ...S.btnXs,
+                        padding: "7px 12px",
+                        fontSize: 12,
+                        color: draft.reason === r.id ? C.accent : C.muted,
+                        borderColor: draft.reason === r.id ? C.accent : C.border,
                       }}
+                      onClick={() => setDraft((d) => ({ ...d, reason: r.id }))}
                     >
-                      {reasonLabel(p.reason)}
-                    </span>
-                  </div>
-                  <button style={S.btnSmall} onClick={() => setConfirmId(p.id)}>
-                    Remove
-                  </button>
+                      {r.label}
+                    </button>
+                  ))}
                 </div>
-                <div style={{ fontFamily: C.mono, fontSize: 13, marginTop: 8 }}>
-                  {fmtDate(`${p.start_date}T12:00:00`)}
-                  {p.end_date !== p.start_date && ` — ${fmtDate(`${p.end_date}T12:00:00`)}`}
-                </div>
-                {p.notes && <div style={S.note}>{p.notes}</div>}
-              </>
-            )}
-          </div>
-        ))}
+              </Field>
 
-        {adding && draft ? (
-          <div style={S.card}>
-            <Field label="Reason">
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {REASONS.map((r) => (
-                  <button
-                    key={r.id}
-                    style={{
-                      ...S.btnXs,
-                      padding: "7px 12px",
-                      fontSize: 12,
-                      color: draft.reason === r.id ? C.accent : C.muted,
-                      borderColor: draft.reason === r.id ? C.accent : C.border,
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+                <div style={S.inputGroup}>
+                  <div style={S.inputLabel}>From</div>
+                  <input
+                    type="date"
+                    style={S.dateInput}
+                    value={draft.start_date}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setDraft((d) => ({
+                        ...d,
+                        start_date: v,
+                        end_date: d.end_date < v ? v : d.end_date,
+                      }));
                     }}
-                    onClick={() => setDraft((d) => ({ ...d, reason: r.id }))}
-                  >
-                    {r.label}
-                  </button>
-                ))}
+                  />
+                </div>
+                <div style={S.inputGroup}>
+                  <div style={S.inputLabel}>To</div>
+                  <input
+                    type="date"
+                    style={S.dateInput}
+                    min={draft.start_date}
+                    value={draft.end_date}
+                    onChange={(e) => setDraft((d) => ({ ...d, end_date: e.target.value }))}
+                  />
+                </div>
               </div>
-            </Field>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
-              <div style={S.inputGroup}>
-                <div style={S.inputLabel}>From</div>
-                <input
-                  type="date"
-                  style={S.dateInput}
-                  value={draft.start_date}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setDraft((d) => ({
-                      ...d,
-                      start_date: v,
-                      end_date: d.end_date < v ? v : d.end_date,
-                    }));
+              <Field label="Notes (optional)">
+                <textarea
+                  style={{ ...S.notes, marginTop: 0, minHeight: 44 }}
+                  placeholder="Anything worth remembering later…"
+                  value={draft.notes || ""}
+                  onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+                />
+              </Field>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button
+                  style={{ ...S.btnPrimary, flex: 1 }}
+                  onClick={() => {
+                    onSavePause(draft);
+                    setAdding(false);
+                    setDraft(null);
                   }}
-                />
-              </div>
-              <div style={S.inputGroup}>
-                <div style={S.inputLabel}>To</div>
-                <input
-                  type="date"
-                  style={S.dateInput}
-                  min={draft.start_date}
-                  value={draft.end_date}
-                  onChange={(e) => setDraft((d) => ({ ...d, end_date: e.target.value }))}
-                />
+                >
+                  {editingId ? "Save changes" : "Save pause"}
+                </button>
+                <button
+                  style={{ ...S.btnGhost, flex: 1 }}
+                  onClick={() => {
+                    setAdding(false);
+                    setDraft(null);
+                  }}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
+          );
 
-            <Field label="Notes (optional)">
-              <textarea
-                style={{ ...S.notes, marginTop: 0, minHeight: 44 }}
-                placeholder="Anything worth remembering later…"
-                value={draft.notes}
-                onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-              />
-            </Field>
+          const card = (p) => {
+            if (editingId === p.id) return <div key={p.id}>{form}</div>;
+            return (
+              <div key={p.id} style={S.card}>
+                {confirmId === p.id ? (
+                  <Confirm
+                    message="Remove this pause? Weeks it covered may break a streak, and sessions in them will count toward stalls."
+                    confirmLabel="Remove"
+                    onConfirm={() => {
+                      setConfirmId(null);
+                      onDeletePause(p.id);
+                    }}
+                    onCancel={() => setConfirmId(null)}
+                  />
+                ) : (
+                  <>
+                    <div style={S.cardRow}>
+                      <span style={{ ...S.setBadge, color: C.warn, background: "#2a2010" }}>
+                        {reasonLabel(p.reason)}
+                      </span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          style={S.btnSmall}
+                          disabled={!!draft}
+                          onClick={() => {
+                            setDraft({ ...p });
+                            setAdding(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          style={S.btnSmall}
+                          disabled={!!draft}
+                          onClick={() => setConfirmId(p.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ fontFamily: C.mono, fontSize: 13, marginTop: 8 }}>
+                      {fmtDate(`${p.start_date}T12:00:00`)}
+                      {p.end_date !== p.start_date && ` — ${fmtDate(`${p.end_date}T12:00:00`)}`}
+                    </div>
+                    {p.notes && <div style={S.note}>{p.notes}</div>}
+                  </>
+                )}
+              </div>
+            );
+          };
 
-            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-              <button
-                style={{ ...S.btnPrimary, flex: 1 }}
-                onClick={() => {
-                  onSavePause(draft);
-                  setAdding(false);
-                  setDraft(null);
-                }}
-              >
-                Save pause
-              </button>
-              <button
-                style={{ ...S.btnGhost, flex: 1 }}
-                onClick={() => {
-                  setAdding(false);
-                  setDraft(null);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button style={S.btnAdd} onClick={startPause}>
-            + Add a pause
-          </button>
-        )}
+          // Upcoming first, soonest at the top — that's the order you plan in.
+          // Finished pauses underneath, most recent first.
+          const upcoming = pauses
+            .filter((p) => p.end_date >= today)
+            .sort((a, b) => (a.start_date < b.start_date ? -1 : 1));
+          const past = pauses
+            .filter((p) => p.end_date < today)
+            .sort((a, b) => (a.start_date < b.start_date ? 1 : -1));
+          const label = (t) => (
+            <div style={{ ...S.subLabel, margin: "4px 0 8px" }}>{t}</div>
+          );
+
+          return (
+            <>
+              {upcoming.length > 0 && past.length > 0 && label("UPCOMING")}
+              {upcoming.map(card)}
+              {past.length > 0 && label(upcoming.length ? "PAST" : "EARLIER")}
+              {past.map(card)}
+              {adding && draft && !editingId ? (
+                form
+              ) : !draft ? (
+                <button style={S.btnAdd} onClick={startPause}>
+                  + Add a pause
+                </button>
+              ) : null}
+            </>
+          );
+        })()}
       </div>
     </div>
   );

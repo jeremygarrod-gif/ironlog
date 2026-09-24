@@ -116,6 +116,8 @@ export function computeStreaks(sessions, workouts, options = {}) {
     target,
     doneThisWeek,
     weekPaused: paused.has(thisWeek),
+    weekPauseReason:
+      (pauses || []).find((p) => pausedWeekKeys([p]).has(thisWeek))?.reason || null,
     weekComplete: thisWeekSessions.length >= target,
     sessionsThisWeek: thisWeekSessions.length,
     remaining: Math.max(0, target - thisWeekSessions.length),
