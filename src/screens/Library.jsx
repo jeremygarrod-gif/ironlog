@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { C, S, toneColor } from "../styles.js";
-import { fmtDate, fmtPct, pctOffTop, repColor } from "../utils.js";
-import { Confirm } from "../components.jsx";
+import { Confirm, Field } from "../components.jsx";
+import { fmtDate, fmtPct, pctOffTop, repColor, todayInputValue, uid } from "../utils.js";
+import { allTimeBests, blockBest, describeE1rm, describeSet } from "../stall.js";
+
+const RESET_REASONS = [
+  { id: "machine", label: "Different machine" },
+  { id: "gym", label: "New gym" },
+  { id: "other", label: "Other" },
+];
+const reasonLabel = (id) => RESET_REASONS.find((r) => r.id === id)?.label || "Other";
 
 export function LibraryList({ library, onSelect, onBack }) {
   const names = Object.keys(library).sort();
@@ -35,23 +43,28 @@ export function LibraryList({ library, onSelect, onBack }) {
   );
 }
 
-export function ExerciseDetail({ name, entries, onRename, onDelete, onBack }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(name);
-  const [confirming, setConfirming] = useState(false);
+export function ExerciseDetail({
+  name,
+  entries,
+  sessions = [],
+  pauses = [],
+  blocks = [],
+  resets = [],
+  onSaveReset,
+  onDeleteReset,
+  onBack,
+}) {
+  const [draft, setDraft] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
 
-  function save() {
-    const trimmed = draft.trim();
-    if (!trimmed || trimmed === name) {
-      setEditing(false);
-      setDraft(name);
-      return;
-    }
-    onRename(trimmed);
-  }
-
-  const sessionPhrase =
-    entries.length > 0 ? ` and ${entries.length} logged session${entries.length === 1 ? "" : "s"}` : "";
+  const pr = allTimeBests(sessions, name);
+  const bb = blockBest({ sessions, pauses, blocks, resets, name });
+  const mine = resets.filter((r) => r.exercise_name === name);
+  const since = bb.baseline
+    ? bb.baseline.kind === "reset"
+      ? `since reset ${fmtDate(`${bb.baseline.date}T12:00:00`)}`
+      : `since block started ${fmtDate(`${bb.baseline.date}T12:00:00`)}`
+    : "no block start set — counting all history";
 
   return (
     <div style={S.screen}>
@@ -59,67 +72,146 @@ export function ExerciseDetail({ name, entries, onRename, onDelete, onBack }) {
         <button style={S.btnBack} onClick={onBack}>
           ← Back
         </button>
-        <span style={S.headerTitle}>{editing ? "Rename exercise" : name}</span>
+        <span style={S.headerTitle}>{name}</span>
         <span style={{ width: 40 }} />
       </div>
 
-      {!editing && !confirming && (
-        <div style={{ display: "flex", gap: 8, padding: "0 16px 14px" }}>
-          <button
-            style={{ ...S.btnGhost, flex: 1 }}
-            onClick={() => {
-              setDraft(name);
-              setEditing(true);
-            }}
-          >
-            Rename
-          </button>
-          <button
-            style={{ ...S.btnGhost, flex: 1, color: C.danger, borderColor: C.danger }}
-            onClick={() => setConfirming(true)}
-          >
-            Delete
-          </button>
-        </div>
-      )}
-
-      {editing && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <input
-            style={S.textInput}
-            value={draft}
-            autoFocus
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <div style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>
-            Updates the name across {entries.length} logged session{entries.length === 1 ? "" : "s"} and
-            any workout that uses it.
+      {entries.length > 0 && (
+        <div style={{ padding: "14px 16px 0", display: "grid", gap: 8 }}>
+          <div style={S.card}>
+            <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.accent }}>
+              ALL-TIME PR
+            </div>
+            {pr.bestE1rm ? (
+              <div style={{ fontFamily: C.mono, fontSize: 13, marginTop: 8, lineHeight: 1.9 }}>
+                <PrRow label="Best e1RM" score={pr.bestE1rm} />
+                <PrRow label="Heaviest top set" score={pr.heaviest} />
+              </div>
+            ) : (
+              <div style={{ color: C.muted, fontSize: 12, marginTop: 6 }}>Bodyweight only so far.</div>
+            )}
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button style={{ ...S.btnPrimary, flex: 1 }} disabled={!draft.trim()} onClick={save}>
-              Save
-            </button>
-            <button
-              style={{ ...S.btnGhost, flex: 1 }}
-              onClick={() => {
-                setEditing(false);
-                setDraft(name);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
-      {confirming && (
-        <div style={{ padding: "0 16px 14px" }}>
-          <Confirm
-            message={`Delete "${name}"? Removes it from any workout that uses it${sessionPhrase}. Everything else in those sessions is kept.`}
-            confirmLabel="Delete exercise"
-            onConfirm={() => onDelete(name)}
-            onCancel={() => setConfirming(false)}
-          />
+          <div style={S.card}>
+            <div style={S.cardRow}>
+              <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.warn }}>
+                BASELINE FOR STALLS
+              </div>
+              {!draft && onSaveReset && (
+                <button
+                  style={S.btnXs}
+                  onClick={() =>
+                    setDraft({ id: uid(), exercise_name: name, reset_date: todayInputValue(), reason: "machine", notes: "" })
+                  }
+                >
+                  Reset baseline
+                </button>
+              )}
+            </div>
+            {bb.best ? (
+              <div style={{ fontFamily: C.mono, fontSize: 13, marginTop: 8, lineHeight: 1.9 }}>
+                <PrRow label="Best" score={bb.best} />
+              </div>
+            ) : (
+              <div style={{ color: C.muted, fontSize: 12, marginTop: 6 }}>
+                Nothing logged since the baseline yet.
+              </div>
+            )}
+            <div style={{ color: C.muted, fontSize: 11, fontFamily: C.mono, marginTop: 4 }}>{since}</div>
+
+            {draft && (
+              <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+                  For a different machine or a new gym, where the numbers aren't comparable. Swapping to
+                  a different exercise doesn't need this — a new name starts fresh on its own.
+                </div>
+                <Field label="Reason">
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {RESET_REASONS.map((r) => (
+                      <button
+                        key={r.id}
+                        style={{
+                          ...S.btnXs,
+                          padding: "7px 11px",
+                          fontSize: 12,
+                          color: draft.reason === r.id ? C.accent : C.muted,
+                          borderColor: draft.reason === r.id ? C.accent : C.border,
+                        }}
+                        onClick={() => setDraft((d) => ({ ...d, reason: r.id }))}
+                      >
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <Field label="From">
+                  <input
+                    type="date"
+                    style={S.dateInput}
+                    value={draft.reset_date}
+                    onChange={(e) => setDraft((d) => ({ ...d, reset_date: e.target.value }))}
+                  />
+                </Field>
+                <Field label="Notes (optional)">
+                  <input
+                    style={S.textInput}
+                    placeholder="e.g. Hammer Strength press at the new gym"
+                    value={draft.notes}
+                    onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+                  />
+                </Field>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    style={{ ...S.btnPrimary, flex: 1 }}
+                    onClick={() => {
+                      onSaveReset(draft);
+                      setDraft(null);
+                    }}
+                  >
+                    Save reset
+                  </button>
+                  <button style={{ ...S.btnGhost, flex: 1 }} onClick={() => setDraft(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {mine.length > 0 && (
+              <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                {mine.map((r) =>
+                  confirmId === r.id ? (
+                    <Confirm
+                      key={r.id}
+                      message="Remove this reset? The baseline falls back to the block start."
+                      confirmLabel="Remove"
+                      onConfirm={() => {
+                        setConfirmId(null);
+                        onDeleteReset(r.id);
+                      }}
+                      onCancel={() => setConfirmId(null)}
+                    />
+                  ) : (
+                    <div
+                      key={r.id}
+                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", gap: 8 }}
+                    >
+                      <div style={{ fontSize: 12 }}>
+                        <span style={{ color: C.text }}>{reasonLabel(r.reason)}</span>
+                        <span style={{ color: C.muted, fontFamily: C.mono, marginLeft: 8 }}>
+                          {fmtDate(`${r.reset_date}T12:00:00`)}
+                        </span>
+                        {r.notes && <div style={{ color: C.muted, marginTop: 2 }}>{r.notes}</div>}
+                      </div>
+                      <button style={{ ...S.btnXs, color: C.danger }} onClick={() => setConfirmId(r.id)}>
+                        ✕
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -189,6 +281,21 @@ export function ExerciseDetail({ name, entries, onRename, onDelete, onBack }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function PrRow({ label, score }) {
+  if (!score) return null;
+  const e = describeE1rm(score);
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+      <span style={{ color: C.muted }}>{label}</span>
+      <span>
+        {describeSet(score)}
+        {e != null && <span style={{ color: C.muted }}> · {e}</span>}
+        <span style={{ color: C.muted }}> · {fmtDate(score.date)}</span>
+      </span>
     </div>
   );
 }

@@ -9,10 +9,15 @@ import {
   loadAll,
   saveDraft,
   saveSchemes,
+  archiveWorkouts,
+  deleteBlock,
+  deleteReset,
+  duplicateWorkouts,
+  saveBlock,
+  saveReset,
+  restoreWorkout,
   savePause,
   deletePause,
-  renameExercise,
-  deleteExercise,
   saveSession,
   saveTemplates,
   saveWeeklyTarget,
@@ -23,6 +28,7 @@ import {
 import { buildExerciseLibrary, uid } from "./utils.js";
 import { useEdgeSwipeBack, useNavStack } from "./nav.js";
 import { computeAchievements, computeStreaks } from "./achievements.js";
+import { sessionStalls } from "./stall.js";
 
 import Auth from "./screens/Auth.jsx";
 import Home from "./screens/Home.jsx";
@@ -33,6 +39,7 @@ import { Schemes, Templates } from "./screens/Manage.jsx";
 import { LibraryList, ExerciseDetail } from "./screens/Library.jsx";
 import Celebrate from "./screens/Celebrate.jsx";
 import Goals from "./screens/Goals.jsx";
+import { ArchiveList, NewBlock } from "./screens/Archive.jsx";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -79,15 +86,24 @@ export default function App() {
     [data]
   );
 
+  const activeWorkouts = useMemo(
+    () => (data ? data.workouts.filter((w) => !w.archived_at) : []),
+    [data]
+  );
+  const archivedWorkouts = useMemo(
+    () => (data ? data.workouts.filter((w) => w.archived_at) : []),
+    [data]
+  );
+
   const streaks = useMemo(
     () =>
       data
-        ? computeStreaks(data.sessions, data.workouts, {
+        ? computeStreaks(data.sessions, activeWorkouts, {
             weeklyTarget: data.weeklyTarget,
             pauses: data.pauses,
           })
         : null,
-    [data]
+    [data, activeWorkouts]
   );
 
   const allExerciseNames = useMemo(() => {
@@ -96,15 +112,6 @@ export default function App() {
     for (const w of data.workouts) for (const e of w.exercises || []) if (e.name) names.add(e.name);
     return [...names].sort();
   }, [data, library]);
-
-  // Body part chosen for a custom exercise, set once anywhere and remembered
-  // everywhere that name shows up in the picker
-  const exerciseCategories = useMemo(() => {
-    const map = {};
-    if (!data) return map;
-    for (const w of data.workouts) for (const e of w.exercises || []) if (e.name && e.category) map[e.name] = e.category;
-    return map;
-  }, [data]);
 
   function flash(text, tone = "ok") {
     setBanner({ text, tone });
@@ -171,13 +178,27 @@ export default function App() {
       );
       const { achievements } = computeAchievements({
         sessions: nextSessions,
-        workouts: data.workouts,
+        workouts: activeWorkouts,
         savedSession: saved,
         weeklyTarget: data.weeklyTarget,
         pauses: data.pauses,
       });
+      const stalls = sessionStalls({
+        sessions: nextSessions,
+        pauses: data.pauses,
+        blocks: data.blocks,
+        resets: data.resets,
+        savedSession: saved,
+      });
+      // "Up on last time" beside "didn't beat the log" for the same lift would
+      // read as a contradiction, so the stall wins. Personal bests stay — a
+      // heaviest-ever single is still worth knowing even when e1RM didn't move.
+      const flagged = new Set(stalls.map((st) => st.name));
+      const shown = achievements.filter(
+        (a) => !(a.kind && a.kind.startsWith("up-") && flagged.has(a.exercise))
+      );
       home();
-      setCelebration(achievements);
+      setCelebration({ achievements: shown, stalls });
     } catch (e) {
       flash(e.message || "Could not save the session.", "error");
     }
@@ -211,7 +232,7 @@ export default function App() {
   async function persistWorkout(w) {
     try {
       const isNew = !w.id;
-      const order = isNew ? data.workouts.length : data.workouts.findIndex((x) => x.id === w.id);
+      const order = isNew ? activeWorkouts.length : activeWorkouts.findIndex((x) => x.id === w.id);
       const saved = await saveWorkout(userId, { ...w, id: w.id || uid() }, order);
       setData((d) => ({
         ...d,
@@ -225,42 +246,6 @@ export default function App() {
     }
   }
 
-  async function renameExerciseEverywhere(oldName, newName) {
-    try {
-      const { changedWorkouts, changedSessions } = await renameExercise(userId, oldName, newName, {
-        workouts: data.workouts,
-        sessions: data.sessions,
-      });
-      setData((d) => ({
-        ...d,
-        workouts: d.workouts.map((w) => changedWorkouts.find((c) => c.id === w.id) || w),
-        sessions: d.sessions.map((s) => changedSessions.find((c) => c.id === s.id) || s),
-      }));
-      back();
-      flash(`Renamed to "${newName}".`);
-    } catch (e) {
-      flash(e.message || "Could not rename that exercise.", "error");
-    }
-  }
-
-  async function deleteExerciseEverywhere(name) {
-    try {
-      const { changedWorkouts, changedSessions } = await deleteExercise(userId, name, {
-        workouts: data.workouts,
-        sessions: data.sessions,
-      });
-      setData((d) => ({
-        ...d,
-        workouts: d.workouts.map((w) => changedWorkouts.find((c) => c.id === w.id) || w),
-        sessions: d.sessions.map((s) => changedSessions.find((c) => c.id === s.id) || s),
-      }));
-      back();
-      flash(`Removed "${name}" from your library.`);
-    } catch (e) {
-      flash(e.message || "Could not remove that exercise.", "error");
-    }
-  }
-
   async function removeWorkout(id) {
     try {
       await deleteWorkout(userId, id);
@@ -269,6 +254,132 @@ export default function App() {
       flash("Workout deleted.");
     } catch (e) {
       flash(e.message || "Could not delete the workout.", "error");
+    }
+  }
+
+  async function archiveBlock({ ids, label, keepCopies, startDate }) {
+    try {
+      const originals = data.workouts.filter((w) => ids.includes(w.id));
+      await archiveWorkouts(userId, ids, label);
+      if (startDate && !data.blocks.some((b) => b.start_date === startDate)) {
+        try {
+          const newBlock = await saveBlock(userId, { start_date: startDate, label: "" });
+          setData((d) => ({
+            ...d,
+            blocks: [newBlock, ...d.blocks].sort((a, b) => (a.start_date < b.start_date ? 1 : -1)),
+          }));
+        } catch {
+          /* migration 004 not run — archiving still succeeded */
+        }
+      }
+      let copies = [];
+      if (keepCopies) {
+        const remaining = activeWorkouts.filter((w) => !ids.includes(w.id)).length;
+        copies = await duplicateWorkouts(userId, originals, remaining);
+      }
+      const stamp = new Date().toISOString();
+      setData((d) => {
+        const drafts = { ...d.drafts };
+        for (const id of ids) delete drafts[id];
+        return {
+          ...d,
+          drafts,
+          workouts: [
+            ...d.workouts.map((w) =>
+              ids.includes(w.id) ? { ...w, archived_at: stamp, archive_label: label } : w
+            ),
+            ...copies,
+          ],
+        };
+      });
+      home();
+      flash(
+        keepCopies
+          ? `Archived "${label}". Fresh copies are ready to edit.`
+          : `Archived "${label}".`
+      );
+    } catch (e) {
+      flash(
+        /archived_at|column/i.test(e.message || "")
+          ? "Run migration-003.sql in Supabase first, then try again."
+          : e.message || "Could not archive.",
+        "error"
+      );
+    }
+  }
+
+  async function restoreOne(id) {
+    try {
+      await restoreWorkout(userId, id);
+      setData((d) => ({
+        ...d,
+        workouts: d.workouts.map((w) =>
+          w.id === id ? { ...w, archived_at: null, archive_label: null } : w
+        ),
+      }));
+      flash("Restored to your workouts.");
+    } catch (e) {
+      flash(e.message || "Could not restore.", "error");
+    }
+  }
+
+  async function copyOne(w) {
+    try {
+      const [copy] = await duplicateWorkouts(userId, [w], activeWorkouts.length);
+      setData((d) => ({ ...d, workouts: [...d.workouts, copy] }));
+      flash(`Copied "${w.name}" to your workouts.`);
+    } catch (e) {
+      flash(e.message || "Could not copy.", "error");
+    }
+  }
+
+  const byStartDesc = (a, b) => (a.start_date < b.start_date ? 1 : -1);
+  const byResetDesc = (a, b) => (a.reset_date < b.reset_date ? 1 : -1);
+  const needs004 = (e) =>
+    /blocks|exercise_resets|relation|does not exist/i.test(e?.message || "")
+      ? "Run migration-004.sql in Supabase first, then try again."
+      : e?.message || "Something went wrong.";
+
+  async function upsertBlock(b) {
+    try {
+      const saved = await saveBlock(userId, b);
+      setData((d) => ({
+        ...d,
+        blocks: [saved, ...d.blocks.filter((x) => x.id !== saved.id)].sort(byStartDesc),
+      }));
+      flash("Block saved.");
+    } catch (e) {
+      flash(needs004(e), "error");
+    }
+  }
+
+  async function removeBlock(id) {
+    try {
+      await deleteBlock(userId, id);
+      setData((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
+    } catch (e) {
+      flash(needs004(e), "error");
+    }
+  }
+
+  async function upsertReset(r) {
+    try {
+      const saved = await saveReset(userId, r);
+      setData((d) => ({
+        ...d,
+        resets: [saved, ...d.resets.filter((x) => x.id !== saved.id)].sort(byResetDesc),
+      }));
+    } catch (e) {
+      flash(needs004(e), "error");
+    }
+  }
+
+  async function removeReset(id) {
+    try {
+      await deleteReset(userId, id);
+      setData((d) => ({ ...d, resets: d.resets.filter((r) => r.id !== id) }));
+    } catch (e) {
+      flash(needs004(e), "error");
     }
   }
 
@@ -326,6 +437,9 @@ export default function App() {
           workout={workout}
           schemes={data.schemes}
           sessions={data.sessions}
+          pauses={data.pauses}
+          blocks={data.blocks}
+          resets={data.resets}
           draft={data.drafts[workout.id] || null}
           onSaveDraft={(state) => handleSaveDraft(workout.id, state)}
           onFinish={finishSession}
@@ -351,9 +465,34 @@ export default function App() {
           schemes={data.schemes}
           templates={data.templates}
           allExerciseNames={allExerciseNames}
-          exerciseCategories={exerciseCategories}
           onSave={persistWorkout}
           onDelete={removeWorkout}
+          onArchive={async (id) => {
+            try {
+              await archiveWorkouts(userId, [id], null);
+              const stamp = new Date().toISOString();
+              setData((d) => {
+                const drafts = { ...d.drafts };
+                delete drafts[id];
+                return {
+                  ...d,
+                  drafts,
+                  workouts: d.workouts.map((w) =>
+                    w.id === id ? { ...w, archived_at: stamp, archive_label: null } : w
+                  ),
+                };
+              });
+              home();
+              flash("Workout archived.");
+            } catch (e) {
+              flash(
+                /archived_at|column/i.test(e.message || "")
+                  ? "Run migration-003.sql in Supabase first, then try again."
+                  : e.message || "Could not archive.",
+                "error"
+              );
+            }
+          }}
           onBack={back}
         />
       );
@@ -391,13 +530,41 @@ export default function App() {
         />
       );
 
+    case "new-block":
+      return (
+        <NewBlock activeWorkouts={activeWorkouts} onConfirm={archiveBlock} onBack={back} />
+      );
+
+    case "archive":
+      return (
+        <ArchiveList
+          archived={archivedWorkouts}
+          sessions={data.sessions}
+          onHistory={(id) => go("history", { workoutId: id })}
+          onRestore={restoreOne}
+          onCopy={copyOne}
+          onDelete={async (id) => {
+            try {
+              await deleteWorkout(userId, id);
+              setData((d) => ({ ...d, workouts: d.workouts.filter((w) => w.id !== id) }));
+            } catch (e) {
+              flash(e.message || "Could not delete.", "error");
+            }
+          }}
+          onBack={back}
+        />
+      );
+
     case "goals":
       return (
         <Goals
           weeklyTarget={data.weeklyTarget}
-          workoutCount={data.workouts.length}
+          workoutCount={activeWorkouts.length}
           pauses={data.pauses}
+          blocks={data.blocks}
           streaks={streaks}
+          onSaveBlock={upsertBlock}
+          onDeleteBlock={removeBlock}
           onSaveTarget={async (n) => {
             setData((d) => ({ ...d, weeklyTarget: n }));
             try {
@@ -445,8 +612,12 @@ export default function App() {
         <ExerciseDetail
           name={route.exerciseName}
           entries={library[route.exerciseName] || []}
-          onRename={(newName) => renameExerciseEverywhere(route.exerciseName, newName)}
-          onDelete={() => deleteExerciseEverywhere(route.exerciseName)}
+          sessions={data.sessions}
+          pauses={data.pauses}
+          blocks={data.blocks}
+          resets={data.resets}
+          onSaveReset={upsertReset}
+          onDeleteReset={removeReset}
           onBack={back}
         />
       );
@@ -455,10 +626,15 @@ export default function App() {
       return (
         <>
           {celebration && (
-            <Celebrate achievements={celebration} onDone={() => setCelebration(null)} />
+            <Celebrate
+              achievements={celebration.achievements}
+              stalls={celebration.stalls}
+              onDone={() => setCelebration(null)}
+            />
           )}
         <Home
-          workouts={data.workouts}
+          workouts={activeWorkouts}
+          archivedCount={archivedWorkouts.length}
           drafts={data.drafts}
           email={session.user.email}
           go={go}

@@ -4,6 +4,7 @@ import { Modal } from "../components.jsx";
 
 export default function Home({
   workouts,
+  archivedCount = 0,
   drafts,
   email,
   streaks,
@@ -155,6 +156,24 @@ export default function Home({
         <button style={S.btnAdd} onClick={() => go("edit-workout", { workoutId: "new" })}>
           + New workout
         </button>
+
+        {(workouts.length > 0 || archivedCount > 0) && (
+          <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+            {workouts.length > 0 && (
+              <button style={S.btnGhost} onClick={() => go("new-block")}>
+                Start a new block
+              </button>
+            )}
+            {archivedCount > 0 && (
+              <button style={S.btnGhost} onClick={() => go("archive")}>
+                Archive
+                <span style={{ color: C.muted, fontFamily: C.mono, marginLeft: 6 }}>
+                  {archivedCount}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={S.section}>

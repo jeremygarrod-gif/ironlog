@@ -5,6 +5,7 @@ import { fmtDate, todayInputValue, uid } from "../utils.js";
 
 const REASONS = [
   { id: "deload", label: "Deload" },
+  { id: "calibration", label: "Calibration" },
   { id: "injury", label: "Injury" },
   { id: "illness", label: "Illness" },
   { id: "travel", label: "Travel" },
@@ -17,16 +18,26 @@ export default function Goals({
   weeklyTarget,
   workoutCount,
   pauses,
+  blocks = [],
   streaks,
   onSaveTarget,
   onSavePause,
   onDeletePause,
+  onSaveBlock,
+  onDeleteBlock,
   onBack,
 }) {
   const [target, setTarget] = useState(weeklyTarget ?? workoutCount ?? 3);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
+  const [blockDraft, setBlockDraft] = useState(null);
+  const [confirmBlock, setConfirmBlock] = useState(null);
+
+  const today = todayInputValue();
+  const current = blocks.find((b) => b.start_date <= today) || null;
+  const upcoming = blocks.filter((b) => b.start_date > today);
+  const past = blocks.filter((b) => b !== current && b.start_date <= today);
 
   function startPause() {
     const today = todayInputValue();
@@ -90,6 +101,165 @@ export default function Goals({
         </div>
       </div>
 
+      {/* Training blocks */}
+      <div style={S.section}>
+        <div style={S.sectionLabel}>TRAINING BLOCKS</div>
+        <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, marginBottom: 12 }}>
+          The stall counter compares each session against your best since the current block began.
+          Starting a new block gives every exercise a fresh baseline. Deloads don't — use a pause for
+          those.
+        </div>
+
+        {!current && !blockDraft && (
+          <div
+            style={{
+              ...S.card,
+              borderColor: C.warn,
+              background: "#2a2010",
+            }}
+          >
+            <div style={{ color: C.warn, fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+              No block start set
+            </div>
+            <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6 }}>
+              Until you set one, every lift is measured against its best ever — including anything
+              from earlier blocks or before a cut.
+            </div>
+          </div>
+        )}
+
+        {current && confirmBlock === current.id && (
+          <div style={S.card}>
+            <Confirm
+              message="Remove the current block start? Stall counts will recalculate against the block before it."
+              confirmLabel="Remove"
+              onConfirm={() => {
+                setConfirmBlock(null);
+                onDeleteBlock(current.id);
+              }}
+              onCancel={() => setConfirmBlock(null)}
+            />
+          </div>
+        )}
+
+        {current && confirmBlock !== current.id && (
+          <div style={{ ...S.card, borderColor: "#2a4a2f" }}>
+            <div style={S.cardRow}>
+              <div>
+                <div style={{ color: C.accent, fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5 }}>
+                  CURRENT BLOCK
+                </div>
+                <div style={{ fontWeight: 600, marginTop: 4 }}>
+                  {current.label || "Current block"}
+                </div>
+                <div style={{ ...S.cardSub, fontFamily: C.mono }}>
+                  started {fmtDate(`${current.start_date}T12:00:00`)}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button style={S.btnSmall} onClick={() => setBlockDraft({ ...current })}>
+                  Edit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {[...upcoming, ...past].map((b) =>
+          confirmBlock === b.id ? (
+            <div key={b.id} style={S.card}>
+              <Confirm
+                message="Remove this block start? Stall counts will recalculate against the block before it."
+                confirmLabel="Remove"
+                onConfirm={() => {
+                  setConfirmBlock(null);
+                  onDeleteBlock(b.id);
+                }}
+                onCancel={() => setConfirmBlock(null)}
+              />
+            </div>
+          ) : (
+            <div key={b.id} style={{ ...S.card, padding: "10px 14px" }}>
+              <div style={S.cardRow}>
+                <div>
+                  <span style={{ fontSize: 13 }}>{b.label || "Block"}</span>
+                  <span style={{ color: C.muted, fontFamily: C.mono, fontSize: 12, marginLeft: 8 }}>
+                    {b.start_date > today ? "starts" : "started"} {fmtDate(`${b.start_date}T12:00:00`)}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button style={S.btnXs} onClick={() => setBlockDraft({ ...b })}>
+                    Edit
+                  </button>
+                  <button
+                    style={{ ...S.btnXs, color: C.danger }}
+                    onClick={() => setConfirmBlock(b.id)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        )}
+
+        {blockDraft ? (
+          <div style={S.card}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+              <div style={S.inputGroup}>
+                <div style={S.inputLabel}>Block started</div>
+                <input
+                  type="date"
+                  style={S.dateInput}
+                  value={blockDraft.start_date}
+                  onChange={(e) => setBlockDraft((d) => ({ ...d, start_date: e.target.value }))}
+                />
+              </div>
+            </div>
+            <Field label="Name (optional)">
+              <input
+                style={S.textInput}
+                placeholder="e.g. Strength block, post-cut"
+                value={blockDraft.label || ""}
+                onChange={(e) => setBlockDraft((d) => ({ ...d, label: e.target.value }))}
+              />
+            </Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                style={{ ...S.btnPrimary, flex: 1 }}
+                onClick={() => {
+                  onSaveBlock(blockDraft);
+                  setBlockDraft(null);
+                }}
+              >
+                Save
+              </button>
+              <button style={{ ...S.btnGhost, flex: 1 }} onClick={() => setBlockDraft(null)}>
+                Cancel
+              </button>
+            </div>
+            {current && blockDraft.id === current.id && (
+              <button
+                style={{ ...S.btnAdd, color: C.danger, marginTop: 6 }}
+                onClick={() => {
+                  setBlockDraft(null);
+                  setConfirmBlock(current.id);
+                }}
+              >
+                Remove this block start
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            style={S.btnAdd}
+            onClick={() => setBlockDraft({ id: uid(), start_date: today, label: "" })}
+          >
+            {current ? "+ Start a new block" : "+ Set when this block started"}
+          </button>
+        )}
+      </div>
+
       {/* Current standing */}
       {streaks && (
         <div style={S.section}>
@@ -113,7 +283,9 @@ export default function Goals({
         <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, marginBottom: 12 }}>
           Deloads, injury and illness are part of training, not failures. A paused week won't break a
           streak — it bridges the gap. It doesn't add to the count either, so the number still
-          reflects weeks you actually completed.
+          reflects weeks you actually completed. Sessions logged during a deload or calibration
+          pause are also left out of the beat-the-log count, since those weeks are held back on
+          purpose.
         </div>
 
         {pauses.length === 0 && !adding && (

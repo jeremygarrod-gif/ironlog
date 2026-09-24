@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { C, S } from "./styles.js";
 import { normRange } from "./utils.js";
-import { CATEGORY_NAMES, EXERCISE_CATEGORIES } from "./exerciseSeed.js";
 
 export function Field({ label, children }) {
   return (
@@ -131,33 +130,12 @@ export function Modal({ title, body, children }) {
 }
 
 // Text input that suggests names already used elsewhere, so the same lift
-// doesn't end up tracked under two spellings. Suggestions are grouped by
-// muscle group from the bundled starter list, plus anything from the user's
-// own history — placed under whatever body part they picked for it
-// (categoryMap), or "Other" if they never set one.
-export function ExerciseNameInput({ value, onChange, allNames, categoryMap = {} }) {
+// doesn't end up tracked under two spellings.
+export function ExerciseNameInput({ value, onChange, allNames }) {
   const [open, setOpen] = useState(false);
   const query = (value || "").toLowerCase();
-
-  const seedNames = new Set(EXERCISE_CATEGORIES.flatMap((g) => g.exercises));
-  const buckets = new Map(EXERCISE_CATEGORIES.map((g) => [g.category, new Set(g.exercises)]));
-  for (const name of allNames) {
-    if (seedNames.has(name)) continue;
-    const cat = CATEGORY_NAMES.includes(categoryMap[name]) ? categoryMap[name] : "Other";
-    if (!buckets.has(cat)) buckets.set(cat, new Set());
-    buckets.get(cat).add(name);
-  }
-
-  const orderedCats = [...CATEGORY_NAMES, ...[...buckets.keys()].filter((c) => !CATEGORY_NAMES.includes(c))];
-
-  const list = orderedCats
-    .map((category) => ({
-      category,
-      exercises: [...buckets.get(category)]
-        .sort((a, b) => a.localeCompare(b))
-        .filter((n) => n.toLowerCase().includes(query) && n !== value),
-    }))
-    .filter((g) => g.exercises.length > 0);
+  const matches = allNames.filter((n) => n.toLowerCase().includes(query) && n !== value);
+  const list = value === "" ? allNames : matches;
 
   return (
     <div style={{ position: "relative" }}>
@@ -183,55 +161,35 @@ export function ExerciseNameInput({ value, onChange, allNames, categoryMap = {} 
             border: `1px solid ${C.border}`,
             borderRadius: 6,
             zIndex: 60,
-            maxHeight: 260,
+            maxHeight: 220,
             overflowY: "auto",
             marginTop: 2,
             boxShadow: "0 6px 20px rgba(0,0,0,0.5)",
           }}
         >
-          {list.map((g) => (
-            <div key={g.category}>
-              <div
-                style={{
-                  position: "sticky",
-                  top: 0,
-                  padding: "6px 12px",
-                  background: C.sunken,
-                  color: C.muted,
-                  fontFamily: C.mono,
-                  fontSize: 10,
-                  letterSpacing: 1.2,
-                  textTransform: "uppercase",
-                  borderBottom: `1px solid ${C.border}`,
-                }}
-              >
-                {g.category}
-              </div>
-              {g.exercises.map((name) => (
-                <button
-                  key={name}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "11px 12px",
-                    background: "none",
-                    border: "none",
-                    borderBottom: `1px solid ${C.border}`,
-                    color: C.text,
-                    cursor: "pointer",
-                    fontSize: 14,
-                    font: "inherit",
-                  }}
-                  onMouseDown={() => {
-                    onChange(name);
-                    setOpen(false);
-                  }}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
+          {list.map((name) => (
+            <button
+              key={name}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "11px 12px",
+                background: "none",
+                border: "none",
+                borderBottom: `1px solid ${C.border}`,
+                color: C.text,
+                cursor: "pointer",
+                fontSize: 14,
+                font: "inherit",
+              }}
+              onMouseDown={() => {
+                onChange(name);
+                setOpen(false);
+              }}
+            >
+              {name}
+            </button>
           ))}
         </div>
       )}

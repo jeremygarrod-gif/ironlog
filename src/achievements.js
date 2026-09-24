@@ -310,6 +310,8 @@ export function computeAchievements({ sessions, workouts, savedSession, weeklyTa
       icon: isPB ? "★" : "▲",
       heading: isPB ? "Personal best" : "Up on last time",
       text: fill(pick(pool, lift.reps + Math.round(lift.weight)), lift),
+      exercise: lift.name,
+      kind: lift.kind,
     });
   }
 

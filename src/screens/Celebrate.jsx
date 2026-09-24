@@ -1,4 +1,5 @@
 import { C, S } from "../styles.js";
+import { describeE1rm, describeSet, isStalled, ordinal } from "../stall.js";
 
 const TONE = {
   pb: { color: C.accent, bg: "#0a2e14", border: C.accent },
@@ -7,8 +8,8 @@ const TONE = {
   milestone: { color: C.text, bg: C.sunken, border: C.border },
 };
 
-export default function Celebrate({ achievements, onDone }) {
-  const nothing = !achievements.length;
+export default function Celebrate({ achievements, stalls = [], onDone }) {
+  const nothing = !achievements.length && !stalls.length;
 
   return (
     <div style={S.overlay}>
@@ -16,7 +17,7 @@ export default function Celebrate({ achievements, onDone }) {
         <div style={{ textAlign: "center", marginBottom: nothing ? 18 : 20 }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Session saved</div>
           <div style={{ color: C.muted, fontSize: 12 }}>
-            {nothing ? "Logged and in the books." : "Worth noting:"}
+            {nothing ? "Logged and in the books." : "Here's how it went:"}
           </div>
         </div>
 
@@ -58,6 +59,61 @@ export default function Celebrate({ achievements, onDone }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {stalls.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div
+              style={{
+                fontFamily: C.mono,
+                fontSize: 10,
+                letterSpacing: 1.5,
+                color: C.muted,
+                marginBottom: 8,
+              }}
+            >
+              DIDN'T BEAT THE LOG
+            </div>
+            <div
+              style={{
+                background: C.sunken,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              {stalls.map((st, i) => {
+                const stalled = isStalled(st.count);
+                const tone = stalled ? C.danger : C.warn;
+                const todayE = describeE1rm(st.current);
+                const bestE = describeE1rm(st.best);
+                return (
+                  <div
+                    key={st.name}
+                    style={{
+                      padding: "10px 13px",
+                      borderTop: i ? `1px solid ${C.border}` : "none",
+                      borderLeft: `3px solid ${tone}`,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{st.name}</span>
+                      <span
+                        style={{ color: tone, fontFamily: C.mono, fontSize: 12, fontWeight: 700 }}
+                      >
+                        {stalled ? `Stalled · ${ordinal(st.count)}` : `${ordinal(st.count)} session`}
+                      </span>
+                    </div>
+                    <div style={{ color: C.muted, fontFamily: C.mono, fontSize: 11, marginTop: 3 }}>
+                      {describeSet(st.current)}
+                      {todayE != null && ` (${todayE})`} vs block best {describeSet(st.best)}
+                      {bestE != null && ` (${bestE})`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

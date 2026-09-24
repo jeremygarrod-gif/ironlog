@@ -2,6 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { C, S, toneColor } from "../styles.js";
 import { Labeled } from "../components.jsx";
 import {
+  compareToLast,
+  describeDelta,
+  describeE1rm,
+  describeSet,
+  evaluateStall,
+  isStalled,
+  ordinal,
+} from "../stall.js";
+import {
   calcWtRange,
   dateInputToISO,
   fmtDate,
@@ -200,7 +209,18 @@ function LastSession({ data, label, withAdvice }) {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
-export default function Log({ workout, schemes, sessions, draft, onSaveDraft, onFinish, onBack }) {
+export default function Log({
+  workout,
+  schemes,
+  sessions,
+  pauses,
+  blocks,
+  resets,
+  draft,
+  onSaveDraft,
+  onFinish,
+  onBack,
+}) {
   const [sessionDate, setSessionDate] = useState(
     draft?.sessionDate ?? todayInputValue()
   );
@@ -211,6 +231,7 @@ export default function Log({ workout, schemes, sessions, draft, onSaveDraft, on
       (workout.exercises || []).map((e) => buildExerciseState(e, schemes, sessions, workout.id))
   );
   const [saving, setSaving] = useState(false);
+  const [stallAlert, setStallAlert] = useState(null);
   const firstRun = useRef(true);
 
   // Autosave the draft, debounced so typing doesn't spam the database
@@ -226,6 +247,29 @@ export default function Log({ workout, schemes, sessions, draft, onSaveDraft, on
   }, [sessionDate, notes, exs]);
 
   const setEx = (i, fn) => setExs((prev) => prev.map((e, j) => (j === i ? fn(e) : e)));
+
+  // Runs when you leave the top set's reps field. Fires at most once per exercise
+  // per session — the acknowledgement is stored on the exercise, so it also
+  // survives leaving and resuming the draft.
+  function checkStall(i) {
+    const ex = exs[i];
+    if (!ex || ex.stallAck) return;
+    const top = ex.workingSets.find((w) => w.isTop);
+    if (!top || top.reps === "" || top.reps == null) return;
+    const result = evaluateStall({
+      sessions,
+      pauses,
+      blocks,
+      resets,
+      name: ex.name,
+      currentSet: { weight: top.weight, reps: top.reps, bodyweight: top.bodyweight },
+      currentDate: sessionDate,
+      excludeSessionId: draft?.sessionId,
+    });
+    if (result && !result.beat && result.count >= 2) {
+      setStallAlert({ index: i, name: ex.name, ...result });
+    }
+  }
 
   function buildSession() {
     return {
@@ -293,6 +337,7 @@ export default function Log({ workout, schemes, sessions, draft, onSaveDraft, on
           schemes={schemes}
           setEx={setEx}
           onRemove={() => setExs((p) => p.filter((_, j) => j !== i))}
+          onTopSetLogged={() => checkStall(i)}
         />
       ))}
 
@@ -314,11 +359,100 @@ export default function Log({ workout, schemes, sessions, draft, onSaveDraft, on
           Progress saves automatically — you can leave and come back.
         </div>
       </div>
+
+      {stallAlert && (
+        <StallAlert
+          alert={stallAlert}
+          onAck={() => {
+            setEx(stallAlert.index, (e) => ({ ...e, stallAck: true }));
+            setStallAlert(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ExerciseCard({ ex, index, schemes, setEx, onRemove }) {
+function StallAlert({ alert, onAck }) {
+  const stalled = isStalled(alert.count);
+  const tone = stalled ? C.danger : C.warn;
+  const todayE = describeE1rm(alert.current);
+  const bestE = describeE1rm(alert.best);
+  const b = alert.baseline;
+  const since = b
+    ? b.kind === "reset"
+      ? `since baseline reset ${fmtDate(`${b.date}T12:00:00`)}`
+      : `since block started ${fmtDate(`${b.date}T12:00:00`)}`
+    : "all-time — no block start set";
+
+  return (
+    <div style={S.overlay} role="alertdialog" aria-modal="true">
+      <div style={{ ...S.modal, borderColor: tone }}>
+        {stalled && (
+          <div
+            style={{
+              display: "inline-block",
+              background: C.dangerDim,
+              color: C.danger,
+              fontFamily: C.mono,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 1.5,
+              padding: "3px 8px",
+              borderRadius: 4,
+              marginBottom: 10,
+            }}
+          >
+            STALLED
+          </div>
+        )}
+        <div
+          style={{
+            fontFamily: C.mono,
+            fontSize: 11,
+            letterSpacing: 1.5,
+            color: tone,
+            marginBottom: 8,
+            textTransform: "uppercase",
+          }}
+        >
+          {ordinal(alert.count)} session without beating the log
+        </div>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 16 }}>{alert.name}</div>
+
+        <div style={{ ...S.panel, fontFamily: C.mono, fontSize: 13, lineHeight: 1.9 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ color: C.muted }}>Today</span>
+            <span>
+              {describeSet(alert.current)}
+              {todayE != null && <span style={{ color: C.muted }}> · e1RM {todayE}</span>}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ color: C.muted }}>Block best</span>
+            <span>
+              {describeSet(alert.best)}
+              {bestE != null && <span style={{ color: C.muted }}> · e1RM {bestE}</span>}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ color: C.muted }}>Set on</span>
+            <span>{fmtDate(alert.best.date)}</span>
+          </div>
+        </div>
+        <div style={{ color: C.muted, fontSize: 11, margin: "-2px 0 12px", fontFamily: C.mono }}>
+          Best {since}
+        </div>
+
+        <button style={{ ...S.btnPrimary, width: "100%" }} onClick={onAck}>
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
   const scheme = schemes.find((s) => s.id === ex.schemeId);
 
   function changeScheme(schemeId) {
@@ -614,6 +748,9 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove }) {
                           ),
                         }))
                       }
+                      onBlur={() => {
+                        if (ws.isTop && onTopSetLogged) onTopSetLogged();
+                      }}
                     />
                   </Labeled>
 
@@ -654,6 +791,37 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove }) {
                     </button>
                   </Labeled>
                 </div>
+
+                {(() => {
+                  const lastSet = ex.lastAny?.working?.[si];
+                  const cmp = compareToLast(
+                    { weight: ws.weight, reps: ws.reps, bodyweight: ws.bodyweight },
+                    lastSet
+                  );
+                  if (!cmp) return null;
+                  const col =
+                    cmp.direction === "up" ? C.accent : cmp.direction === "down" ? C.danger : C.muted;
+                  return (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "baseline",
+                        marginTop: 8,
+                        fontFamily: C.mono,
+                        fontSize: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span style={{ color: C.muted }}>vs last session</span>
+                      <span style={{ color: C.muted }}>{describeSet(cmp.last)}</span>
+                      <span style={{ color: col, fontWeight: 700 }}>
+                        {describeDelta(cmp)}
+                        {cmp.direction !== "same" && cmp.current.kind === "wt" && " e1RM"}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {advice && advice.tone !== "ok" && (
                   <div
