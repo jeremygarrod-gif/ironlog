@@ -39,6 +39,7 @@ import { Schemes, Templates } from "./screens/Manage.jsx";
 import { LibraryList, ExerciseDetail } from "./screens/Library.jsx";
 import Celebrate from "./screens/Celebrate.jsx";
 import Goals from "./screens/Goals.jsx";
+import Guide from "./screens/Guide.jsx";
 import { ArchiveList, NewBlock } from "./screens/Archive.jsx";
 
 export default function App() {
@@ -115,10 +116,17 @@ export default function App() {
 
   function flash(text, tone = "ok") {
     setBanner({ text, tone });
-    setTimeout(() => setBanner(null), 4500);
+    setTimeout(() => setBanner(null), tone === "error" ? 9000 : 4500);
   }
 
   useEdgeSwipeBack(back, lastPop);
+
+  // Any "?" in the app raises this; open the guide at that section
+  useEffect(() => {
+    const open = (e) => go("guide", { section: e.detail || null });
+    window.addEventListener("ironlog:help", open);
+    return () => window.removeEventListener("ironlog:help", open);
+  }, [go]);
 
   // ── Gates ──────────────────────────────────────────────────────────────────
   if (!authReady) return <Splash text="…" />;
@@ -260,8 +268,11 @@ export default function App() {
   async function archiveBlock({ ids, label, keepCopies, startDate }) {
     try {
       const originals = data.workouts.filter((w) => ids.includes(w.id));
-      await archiveWorkouts(userId, ids, label);
-      if (startDate && !data.blocks.some((b) => b.start_date === startDate)) {
+      // Starting a block without archiving anything is allowed — a fresh
+      // baseline on the same workouts, e.g. after a cut
+      if (ids.length) await archiveWorkouts(userId, ids, label);
+      const alreadySet = data.blocks.some((b) => b.start_date === startDate);
+      if (startDate && !alreadySet) {
         try {
           const newBlock = await saveBlock(userId, { start_date: startDate, label: "" });
           setData((d) => ({
@@ -273,7 +284,7 @@ export default function App() {
         }
       }
       let copies = [];
-      if (keepCopies) {
+      if (keepCopies && ids.length) {
         const remaining = activeWorkouts.filter((w) => !ids.includes(w.id)).length;
         copies = await duplicateWorkouts(userId, originals, remaining);
       }
@@ -293,8 +304,13 @@ export default function App() {
         };
       });
       home();
+      const when = new Date(`${startDate}T12:00:00`).toLocaleDateString();
       flash(
-        keepCopies
+        !ids.length
+          ? alreadySet
+            ? `A block already starts on ${when} — nothing to change.`
+            : `New block starts ${when}.`
+          : keepCopies
           ? `Archived "${label}". Fresh copies are ready to edit.`
           : `Archived "${label}".`
       );
@@ -429,6 +445,7 @@ export default function App() {
 
   // ── Routing ────────────────────────────────────────────────────────────────
 
+  const screen = (() => {
   switch (route.screen) {
     case "log":
       if (!workout) return <Splash text="Workout not found." />;
@@ -555,6 +572,9 @@ export default function App() {
         />
       );
 
+    case "guide":
+      return <Guide initialSection={route.section || null} onBack={back} />;
+
     case "goals":
       return (
         <Goals
@@ -648,6 +668,37 @@ export default function App() {
         </>
       );
   }
+  })();
+
+  // Messages float above every screen. They used to render only on the home
+  // screen, so a failure anywhere else — archiving from the edit screen, say —
+  // happened silently.
+  return (
+    <>
+      {screen}
+      {banner && (
+        <div
+          role="status"
+          onClick={() => setBanner(null)}
+          style={{
+            position: "fixed",
+            left: 12,
+            right: 12,
+            bottom: "calc(16px + env(safe-area-inset-bottom))",
+            zIndex: 200,
+            maxWidth: 496,
+            margin: "0 auto",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            cursor: "pointer",
+            ...S.banner(banner.tone),
+            marginTop: 0,
+          }}
+        >
+          {banner.text}
+        </div>
+      )}
+    </>
+  );
 }
 
 function Splash({ text, children }) {

@@ -37,7 +37,9 @@ export function NewBlock({ activeWorkouts, onConfirm, onBack }) {
       </div>
 
       <div style={{ padding: "14px 16px 0", color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
-        Archives the workouts below together under one name. Their session history stays browsable
+        Sets the date your next block begins, which gives every exercise a fresh stall baseline.
+        It can also archive the workouts you're finishing with — untick them all to keep training
+        the same workouts. Archiving puts them together under one name. Their session history stays browsable
         from the archive, and every exercise keeps its full record in the library — so weights in
         your new block still pre-fill from the last time you did each lift.
       </div>
@@ -109,6 +111,7 @@ export function NewBlock({ activeWorkouts, onConfirm, onBack }) {
         })}
       </div>
 
+      {count > 0 && (
       <div style={S.section}>
         <button
           onClick={() => setKeepCopies((v) => !v)}
@@ -152,11 +155,12 @@ export function NewBlock({ activeWorkouts, onConfirm, onBack }) {
           </div>
         </button>
       </div>
+      )}
 
       <div style={{ padding: "8px 16px 40px" }}>
         <button
-          style={{ ...S.btnPrimary, width: "100%", opacity: count && label.trim() ? 1 : 0.4 }}
-          disabled={!count || !label.trim() || busy}
+          style={{ ...S.btnPrimary, width: "100%", opacity: !count || label.trim() ? 1 : 0.4 }}
+          disabled={busy || (count > 0 && !label.trim())}
           onClick={async () => {
             setBusy(true);
             await onConfirm({
@@ -169,7 +173,9 @@ export function NewBlock({ activeWorkouts, onConfirm, onBack }) {
           }}
         >
           {busy
-            ? "Archiving…"
+            ? "Saving…"
+            : !count
+            ? "Start the new block"
             : `Archive ${count} workout${count === 1 ? "" : "s"}${keepCopies ? " and keep copies" : ""}`}
         </button>
       </div>

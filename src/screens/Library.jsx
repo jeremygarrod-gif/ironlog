@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, S, toneColor } from "../styles.js";
-import { Confirm, Field } from "../components.jsx";
+import { Confirm, Field, HelpLink } from "../components.jsx";
 import { fmtDate, fmtPct, pctOffTop, repColor, todayInputValue, uid } from "../utils.js";
 import { allTimeBests, blockBest, describeE1rm, describeSet } from "../stall.js";
 
@@ -81,6 +81,7 @@ export function ExerciseDetail({
           <div style={S.card}>
             <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.accent }}>
               ALL-TIME PR
+              <HelpLink section="progress" />
             </div>
             {pr.bestE1rm ? (
               <div style={{ fontFamily: C.mono, fontSize: 13, marginTop: 8, lineHeight: 1.9 }}>
@@ -96,6 +97,7 @@ export function ExerciseDetail({
             <div style={S.cardRow}>
               <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.warn }}>
                 BASELINE FOR STALLS
+                <HelpLink section="progress" />
               </div>
               {!draft && onSaveReset && (
                 <button

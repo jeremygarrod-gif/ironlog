@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, S } from "../styles.js";
-import { Confirm, Field } from "../components.jsx";
+import { Confirm, Field, HelpLink } from "../components.jsx";
 import { fmtDate, todayInputValue, uid } from "../utils.js";
 
 const REASONS = [
@@ -38,6 +38,12 @@ export default function Goals({
   const current = blocks.find((b) => b.start_date <= today) || null;
   const upcoming = blocks.filter((b) => b.start_date > today);
   const past = blocks.filter((b) => b !== current && b.start_date <= today);
+  // A block set for a future date is still set. Before this, a block that
+  // hadn't started yet was treated as no block at all — the screen said "No
+  // block start set" while one was sitting right there for next week.
+  const nextUp = [...upcoming].sort((a, b) => (a.start_date < b.start_date ? -1 : 1))[0] || null;
+  const headline = current || nextUp;
+  const isNext = !current && !!nextUp;
 
   function startPause() {
     const today = todayInputValue();
@@ -57,7 +63,7 @@ export default function Goals({
 
       {/* Weekly target */}
       <div style={S.section}>
-        <div style={S.sectionLabel}>WEEKLY GOAL</div>
+        <div style={S.sectionLabel}>WEEKLY GOAL<HelpLink section="goals" /></div>
         <div style={S.card}>
           <Field label="Sessions per week">
             <div style={S.inputRow}>
@@ -103,14 +109,14 @@ export default function Goals({
 
       {/* Training blocks */}
       <div style={S.section}>
-        <div style={S.sectionLabel}>TRAINING BLOCKS</div>
+        <div style={S.sectionLabel}>TRAINING BLOCKS<HelpLink section="blocks" /></div>
         <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, marginBottom: 12 }}>
           The stall counter compares each session against your best since the current block began.
           Starting a new block gives every exercise a fresh baseline. Deloads don't — use a pause for
           those.
         </div>
 
-        {!current && !blockDraft && (
+        {!headline && !blockDraft && (
           <div
             style={{
               ...S.card,
@@ -128,36 +134,45 @@ export default function Goals({
           </div>
         )}
 
-        {current && confirmBlock === current.id && (
+        {headline && confirmBlock === headline.id && (
           <div style={S.card}>
             <Confirm
-              message="Remove the current block start? Stall counts will recalculate against the block before it."
+              message={
+                isNext
+                  ? "Remove this upcoming block? Lifts will keep being measured against the block before it."
+                  : "Remove the current block start? Stall counts will recalculate against the block before it."
+              }
               confirmLabel="Remove"
               onConfirm={() => {
                 setConfirmBlock(null);
-                onDeleteBlock(current.id);
+                onDeleteBlock(headline.id);
               }}
               onCancel={() => setConfirmBlock(null)}
             />
           </div>
         )}
 
-        {current && confirmBlock !== current.id && (
+        {headline && confirmBlock !== headline.id && (
           <div style={{ ...S.card, borderColor: "#2a4a2f" }}>
             <div style={S.cardRow}>
               <div>
                 <div style={{ color: C.accent, fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5 }}>
-                  CURRENT BLOCK
+                  {isNext ? "NEXT BLOCK" : "CURRENT BLOCK"}
                 </div>
                 <div style={{ fontWeight: 600, marginTop: 4 }}>
-                  {current.label || "Current block"}
+                  {headline.label || (isNext ? "Next block" : "Current block")}
                 </div>
                 <div style={{ ...S.cardSub, fontFamily: C.mono }}>
-                  started {fmtDate(`${current.start_date}T12:00:00`)}
+                  {isNext ? "starts" : "started"} {fmtDate(`${headline.start_date}T12:00:00`)}
                 </div>
+                {isNext && (
+                  <div style={{ ...S.cardSub, marginTop: 6, lineHeight: 1.5 }}>
+                    Set and ready. Every lift gets a fresh baseline from this date.
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button style={S.btnSmall} onClick={() => setBlockDraft({ ...current })}>
+                <button style={S.btnSmall} onClick={() => setBlockDraft({ ...headline })}>
                   Edit
                 </button>
               </div>
@@ -165,7 +180,7 @@ export default function Goals({
           </div>
         )}
 
-        {[...upcoming, ...past].map((b) =>
+        {[...upcoming, ...past].filter((b) => b !== headline).map((b) =>
           confirmBlock === b.id ? (
             <div key={b.id} style={S.card}>
               <Confirm
@@ -238,12 +253,12 @@ export default function Goals({
                 Cancel
               </button>
             </div>
-            {current && blockDraft.id === current.id && (
+            {headline && blockDraft.id === headline.id && (
               <button
                 style={{ ...S.btnAdd, color: C.danger, marginTop: 6 }}
                 onClick={() => {
                   setBlockDraft(null);
-                  setConfirmBlock(current.id);
+                  setConfirmBlock(headline.id);
                 }}
               >
                 Remove this block start
@@ -255,7 +270,7 @@ export default function Goals({
             style={S.btnAdd}
             onClick={() => setBlockDraft({ id: uid(), start_date: today, label: "" })}
           >
-            {current ? "+ Start a new block" : "+ Set when this block started"}
+            {headline ? "+ Add another block" : "+ Set when this block started"}
           </button>
         )}
       </div>
@@ -279,7 +294,7 @@ export default function Goals({
 
       {/* Pauses */}
       <div style={S.section}>
-        <div style={S.sectionLabel}>PAUSES</div>
+        <div style={S.sectionLabel}>PAUSES<HelpLink section="pauses" /></div>
         <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.6, marginBottom: 12 }}>
           Deloads, injury and illness are part of training, not failures. A paused week won't break a
           streak — it bridges the gap. It doesn't add to the count either, so the number still

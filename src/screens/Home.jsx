@@ -20,6 +20,24 @@ export default function Home({
 
   const workout = workouts.find((w) => w.id === resumeFor);
 
+  const welcomeKey = `ironlog:welcome-dismissed:${email || ""}`;
+  const [welcomeGone, setWelcomeGone] = useState(() => {
+    try {
+      return localStorage.getItem(welcomeKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const isNew = !streaks || streaks.totalSessions === 0;
+  const dismissWelcome = () => {
+    setWelcomeGone(true);
+    try {
+      localStorage.setItem(welcomeKey, "1");
+    } catch {
+      /* private browsing: it'll just show again next time */
+    }
+  };
+
   // A gentle prompt when the week is running out and you're short — the in-app
   // stand-in for a push notification. Silent if you're on track, already done,
   // or deliberately paused.
@@ -42,10 +60,42 @@ export default function Home({
         <span style={S.logo}>
           IRON<span style={{ color: C.accent }}>LOG</span>
         </span>
-        <button style={S.btnSmall} onClick={onSignOut}>
-          Sign out
-        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button style={S.btnSmall} onClick={() => go("guide")}>
+            Guide
+          </button>
+          <button style={S.btnSmall} onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
       </div>
+
+      {isNew && !welcomeGone && (
+        <div style={{ padding: "14px 16px 0" }}>
+          <div style={{ ...S.card, borderColor: "#2a4a2f", marginBottom: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Welcome to IRONLOG</div>
+            <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
+              A two-minute read explains how everything works — what to tap at the gym, what the
+              colours mean, and how progress is tracked. You can reopen it any time from{" "}
+              <b style={{ color: C.text }}>Guide</b> at the top.
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                style={{ ...S.btnPrimary, flex: 1 }}
+                onClick={() => {
+                  dismissWelcome();
+                  go("guide");
+                }}
+              >
+                Open the guide
+              </button>
+              <button style={S.btnGhost} onClick={dismissWelcome}>
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {streaks && workouts.length > 0 && (
         <div style={{ padding: "14px 16px 0" }}>
@@ -218,7 +268,6 @@ export default function Home({
             }}
           />
         </div>
-        {banner && <div style={S.banner(banner.tone)}>{banner.text}</div>}
         <div style={{ color: C.muted, fontSize: 11, marginTop: 12, lineHeight: 1.6 }}>
           Signed in as {email}. Your data is stored in your account and syncs across devices.
         </div>

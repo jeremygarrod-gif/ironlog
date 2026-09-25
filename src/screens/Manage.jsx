@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, S } from "../styles.js";
-import { Field, RangeOrSingle, RepRangeInput } from "../components.jsx";
+import { Field, HelpLink, RangeOrSingle, RepRangeInput } from "../components.jsx";
 import { fmtPctRange, fmtReps, fmtRest, uid } from "../utils.js";
 
 // ── Warm-up schemes ──────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ export function Schemes({ schemes, onSave, onBack }) {
         <button style={S.btnBack} onClick={onBack}>
           ← Back
         </button>
-        <span style={S.headerTitle}>Warm-up schemes</span>
+        <span style={S.headerTitle}>Warm-up schemes<HelpLink section="setup" /></span>
         <button
           style={S.btnPrimary}
           onClick={() => {
@@ -168,7 +168,7 @@ export function Templates({ templates, schemes, onSave, onBack }) {
         <button style={S.btnBack} onClick={onBack}>
           ← Back
         </button>
-        <span style={S.headerTitle}>Exercise templates</span>
+        <span style={S.headerTitle}>Exercise templates<HelpLink section="setup" /></span>
         <button
           style={S.btnPrimary}
           onClick={() => {

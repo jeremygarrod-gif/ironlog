@@ -223,3 +223,40 @@ export function SchemePreview({ scheme, fmtReps, fmtPctRange, fmtRest }) {
     </div>
   );
 }
+
+// A small "?" that opens the guide at a given section. It raises an event
+// rather than taking a navigation prop, so it can sit anywhere without every
+// screen having to pass routing down.
+export function HelpLink({ section, label }) {
+  return (
+    <button
+      type="button"
+      aria-label={label || "How this works"}
+      onClick={(e) => {
+        e.stopPropagation();
+        window.dispatchEvent(new CustomEvent("ironlog:help", { detail: section }));
+      }}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        border: `1px solid ${C.border}`,
+        background: "none",
+        color: C.muted,
+        fontSize: 11,
+        fontWeight: 700,
+        fontFamily: C.mono,
+        cursor: "pointer",
+        padding: 0,
+        marginLeft: 7,
+        verticalAlign: "middle",
+        lineHeight: 1,
+      }}
+    >
+      ?
+    </button>
+  );
+}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { C, S, toneColor } from "../styles.js";
-import { Labeled } from "../components.jsx";
+import { Labeled, HelpLink } from "../components.jsx";
 import {
   compareToLast,
   describeDelta,
@@ -235,17 +235,39 @@ export default function Log({
   const [stallAlert, setStallAlert] = useState(null);
   const firstRun = useRef(true);
 
-  // Autosave the draft, debounced so typing doesn't spam the database
+  // Autosave the draft, debounced so typing doesn't spam the database.
+  //
+  // The debounce alone had a gap: leaving the screen cancelled a save that
+  // hadn't fired yet, so reps typed just before "Save & exit" were lost. Now a
+  // pending save is flushed when the screen closes — unless the session was
+  // just finished, where saving a draft would bring back a phantom "in
+  // progress" workout.
+  const latest = useRef({ sessionDate, notes, exs });
+  const saveRef = useRef(onSaveDraft);
+  const pending = useRef(false);
+  const finished = useRef(false);
+  latest.current = { sessionDate, notes, exs };
+  saveRef.current = onSaveDraft;
+
   useEffect(() => {
     if (firstRun.current) {
       firstRun.current = false;
       return;
     }
+    pending.current = true;
     const t = setTimeout(() => {
-      onSaveDraft({ sessionDate, notes, exs });
+      pending.current = false;
+      if (!finished.current) saveRef.current(latest.current);
     }, 800);
     return () => clearTimeout(t);
   }, [sessionDate, notes, exs]);
+
+  useEffect(
+    () => () => {
+      if (pending.current && !finished.current) saveRef.current(latest.current);
+    },
+    []
+  );
 
   const setEx = (i, fn) => setExs((prev) => prev.map((e, j) => (j === i ? fn(e) : e)));
 
@@ -302,6 +324,8 @@ export default function Log({
   }
 
   async function finish() {
+    finished.current = true;
+    pending.current = false;
     setSaving(true);
     await onFinish(buildSession());
     setSaving(false);
@@ -320,6 +344,9 @@ export default function Log({
       </div>
 
       <div style={{ padding: "12px 16px 0" }}>
+        <div style={{ float: "right", marginTop: 2 }}>
+          <HelpLink section="logging" label="How logging works" />
+        </div>
         <Labeled label="SESSION DATE">
           <input
             type="date"

@@ -7,6 +7,7 @@ import {
   RangeOrSingle,
   RepRangeInput,
   SchemePreview,
+  HelpLink,
 } from "../components.jsx";
 import { fmtPctRange, fmtReps, fmtRest, uid } from "../utils.js";
 
@@ -93,7 +94,7 @@ export default function EditWorkout({
       </div>
 
       <div style={{ padding: "6px 16px 8px" }}>
-        <div style={S.sectionLabel}>EXERCISES</div>
+        <div style={S.sectionLabel}>EXERCISES<HelpLink section="workout" /></div>
       </div>
 
       {exercises.map((ex, i) => {

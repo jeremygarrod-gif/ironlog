@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { C, S, toneColor } from "../styles.js";
-import { Confirm } from "../components.jsx";
+import { Confirm, HelpLink } from "../components.jsx";
 import { fmtDate, fmtDateShort, fmtPct, pctOffTop, repColor, round5 } from "../utils.js";
 
 // ── Progression chart ────────────────────────────────────────────────────────
@@ -136,6 +136,9 @@ export default function History({ sessions, workoutName, onBack, onSaveSession, 
                 {v === "progress" ? "PROGRESS" : "SESSION LOG"}
               </button>
             ))}
+          </div>
+          <div style={{ padding: "2px 16px 8px", color: C.muted, fontSize: 11, textAlign: "right" }}>
+            How to read this<HelpLink section="history" />
           </div>
 
           {view === "progress" &&
