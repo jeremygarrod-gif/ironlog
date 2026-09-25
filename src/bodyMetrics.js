@@ -41,7 +41,12 @@ export function smoothedTrend(entries, field, window = 7) {
   const sorted = chronological(entries).filter((e) => e[field] != null);
   return sorted.map((e, i) => {
     const slice = sorted.slice(Math.max(0, i - window + 1), i + 1);
-    return { date: e.measured_at, raw: e[field], smooth: avg(slice.map((s) => s[field])) };
+    return {
+      date: e.measured_at,
+      raw: e[field],
+      smooth: avg(slice.map((s) => s[field])),
+      notes: e.notes || "",
+    };
   });
 }
 

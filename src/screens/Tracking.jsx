@@ -10,7 +10,11 @@ function fmt1(n) {
 
 // Faint daily line plus a solid smoothed one — the whole point is that the
 // smoothed line is what you actually judge progress on, not any one reading.
-function TrendChart({ points }) {
+// A reading with a note gets a bigger, tappable marker, so an outlier on the
+// line can be explained without leaving the chart.
+function TrendChart({ points, unit }) {
+  const [activeIdx, setActiveIdx] = useState(null);
+
   if (points.length < 2) return null;
 
   const W = 320;
@@ -29,31 +33,62 @@ function TrendChart({ points }) {
   const smoothLine = points.map((p, i) => [x(i), y(p.smooth)]);
   const ticks = [min, (min + max) / 2, max].map((v) => Math.round(v * 10) / 10);
   const labelIdx = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])];
+  const active = activeIdx != null ? points[activeIdx] : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
-      {ticks.map((t, i) => (
-        <line key={i} x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke={C.border} strokeWidth="1" />
-      ))}
-      {ticks.map((t, i) => (
-        <text key={i} x={PAD.l - 5} y={y(t) + 3.5} textAnchor="end" fontSize="9" fill={C.muted}>
-          {t}
-        </text>
-      ))}
-      {labelIdx.map((i) => (
-        <text key={i} x={x(i)} y={H - 5} textAnchor="middle" fontSize="9" fill={C.muted}>
-          {fmtDateShort(points[i].date)}
-        </text>
-      ))}
-      <polyline
-        points={rawLine.map((p) => p.join(",")).join(" ")}
-        fill="none"
-        stroke={C.accent}
-        strokeWidth="1"
-        strokeOpacity="0.3"
-      />
-      <polyline points={smoothLine.map((p) => p.join(",")).join(" ")} fill="none" stroke={C.accent} strokeWidth="2" />
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
+        {ticks.map((t, i) => (
+          <line key={i} x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke={C.border} strokeWidth="1" />
+        ))}
+        {ticks.map((t, i) => (
+          <text key={i} x={PAD.l - 5} y={y(t) + 3.5} textAnchor="end" fontSize="9" fill={C.muted}>
+            {t}
+          </text>
+        ))}
+        {labelIdx.map((i) => (
+          <text key={i} x={x(i)} y={H - 5} textAnchor="middle" fontSize="9" fill={C.muted}>
+            {fmtDateShort(points[i].date)}
+          </text>
+        ))}
+        <polyline
+          points={rawLine.map((p) => p.join(",")).join(" ")}
+          fill="none"
+          stroke={C.accent}
+          strokeWidth="1"
+          strokeOpacity="0.3"
+        />
+        <polyline points={smoothLine.map((p) => p.join(",")).join(" ")} fill="none" stroke={C.accent} strokeWidth="2" />
+        {points.map((p, i) =>
+          p.notes ? (
+            <circle
+              key={i}
+              cx={x(i)}
+              cy={y(p.raw)}
+              r={activeIdx === i ? 6 : 5}
+              fill={C.warn}
+              stroke={C.bg}
+              strokeWidth="1.5"
+              style={{ cursor: "pointer" }}
+              onClick={() => setActiveIdx(activeIdx === i ? null : i)}
+            />
+          ) : (
+            <circle key={i} cx={x(i)} cy={y(p.raw)} r={2} fill={C.muted} />
+          )
+        )}
+      </svg>
+      <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>
+        <span style={{ color: C.warn }}>●</span> has a note — tap to read it
+      </div>
+      {active && (
+        <div style={{ ...S.note, marginTop: 8 }}>
+          <div style={{ color: C.text, fontWeight: 600, marginBottom: 2 }}>
+            {fmtDate(active.date)} · {fmt1(active.raw)} {unit}
+          </div>
+          {active.notes}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -219,7 +254,7 @@ export default function Tracking({ entries, onSave, onDelete, onBack }) {
             <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>
               WEIGHT TREND
             </div>
-            <TrendChart points={weightTrend} />
+            <TrendChart points={weightTrend} unit="lbs" />
             <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>faint = daily · solid = 7-entry average</div>
           </div>
         </div>
@@ -231,7 +266,7 @@ export default function Tracking({ entries, onSave, onDelete, onBack }) {
             <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>
               WAIST TREND
             </div>
-            <TrendChart points={waistTrend} />
+            <TrendChart points={waistTrend} unit="in" />
           </div>
         </div>
       )}
