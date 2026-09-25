@@ -94,6 +94,7 @@ export function buildExerciseState(exDef, schemes, sessions, workoutId) {
         date: anyHit.session.performed_at,
         workoutName: anyHit.session.workout_name,
         sameWorkout: anyHit.session.workout_id === workoutId,
+        notes: anyHit.exercise.notes || "",
       }
     : null;
 
@@ -103,6 +104,7 @@ export function buildExerciseState(exDef, schemes, sessions, workoutId) {
           working: thisHit.exercise.sets?.working || [],
           date: thisHit.session.performed_at,
           workoutName: thisHit.session.workout_name,
+          notes: thisHit.exercise.notes || "",
         }
       : null;
 
@@ -204,6 +206,7 @@ function LastSession({ data, label, withAdvice }) {
           </div>
         );
       })}
+      {data.notes && <div style={S.note}>{data.notes}</div>}
     </div>
   );
 }
@@ -270,6 +273,10 @@ export default function Log({
   );
 
   const setEx = (i, fn) => setExs((prev) => prev.map((e, j) => (j === i ? fn(e) : e)));
+
+  // Most recent earlier session of this same workout, for surfacing what was
+  // noted overall last time — separate from each exercise's own last-time notes
+  const lastWorkoutSession = sessions.find((s) => s.workout_id === workout.id);
 
   // Runs when you leave the top set's reps field. Fires at most once per exercise
   // per session — the acknowledgement is stored on the exercise, so it also
@@ -355,6 +362,15 @@ export default function Log({
             onChange={(e) => setSessionDate(e.target.value)}
           />
         </Labeled>
+
+        {lastWorkoutSession?.notes && (
+          <div style={{ ...S.panel, marginTop: 10 }}>
+            <div style={{ fontSize: 11, fontFamily: C.mono, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>
+              LAST TIME · {fmtDate(lastWorkoutSession.performed_at)}
+            </div>
+            <div style={{ fontSize: 13 }}>{lastWorkoutSession.notes}</div>
+          </div>
+        )}
       </div>
 
       {exs.map((ex, i) => (

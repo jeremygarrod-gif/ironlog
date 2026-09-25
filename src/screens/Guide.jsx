@@ -233,7 +233,8 @@ export const SECTIONS = [
         <P>
           Tap <B>Start</B>. Everything saves as you go, so you can leave mid-workout: tap{" "}
           <B>← Save &amp; exit</B> and the button on the home screen becomes <B>Resume</B>. Resume picks up
-          exactly where you left off; <B>Start fresh</B> throws the half-finished session away.
+          exactly where you left off; <B>Start fresh</B> throws the half-finished session away. If you left
+          a session note last time you did this workout, it shows up near the top, above the exercises.
         </P>
         <H>For each exercise, top to bottom</H>
         <Steps
@@ -241,7 +242,8 @@ export const SECTIONS = [
             <>
               <B>Last time</B> — what you did last session, and whether to go up, stay or come down. If
               the lift is on more than one day, you'll see the most recent time you did it anywhere,
-              plus the last time on this day.
+              plus the last time on this day. Whatever you wrote in that exercise's notes last time
+              shows here too.
             </>,
             <>
               <B>Top set weight</B> — filled in from last time. Change it and every warm-up and back-off
