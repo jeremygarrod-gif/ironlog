@@ -233,6 +233,15 @@ export default function Home({
       </div>
 
       <div style={S.section}>
+        <div style={S.sectionLabel}>TRACKING</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button style={S.btnGhost} onClick={() => go("tracking")}>
+            Body tracking
+          </button>
+        </div>
+      </div>
+
+      <div style={S.section}>
         <div style={S.sectionLabel}>TEMPLATES & LIBRARY</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button style={S.btnGhost} onClick={() => go("library")}>

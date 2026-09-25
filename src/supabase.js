@@ -116,7 +116,7 @@ export const DEFAULT_TEMPLATES = [
 // ── Loading ──────────────────────────────────────────────────────────────────
 
 export async function loadAll(userId) {
-  const [schemes, templates, workouts, sessions, drafts, settings, pauses, blocks, resets] =
+  const [schemes, templates, workouts, sessions, drafts, settings, pauses, blocks, resets, bodyMetrics] =
     await Promise.all([
     supabase.from("schemes").select("*").order("sort_order"),
     supabase.from("exercise_templates").select("*").order("sort_order"),
@@ -127,6 +127,7 @@ export async function loadAll(userId) {
     supabase.from("pauses").select("*").order("start_date", { ascending: false }),
     supabase.from("blocks").select("*").order("start_date", { ascending: false }),
     supabase.from("exercise_resets").select("*").order("reset_date", { ascending: false }),
+    supabase.from("body_metrics").select("*").order("measured_at", { ascending: false }),
   ]);
 
   const firstError =
@@ -140,6 +141,8 @@ export async function loadAll(userId) {
   // blocks and resets arrive with migration 004 — optional for the same reason
   const blockRows = blocks.error ? [] : blocks.data || [];
   const resetRows = resets.error ? [] : resets.data || [];
+  // body_metrics arrives with migration 005 — optional for the same reason
+  const bodyMetricRows = bodyMetrics.error ? [] : bodyMetrics.data || [];
 
   let schemeRows = schemes.data || [];
   let templateRows = templates.data || [];
@@ -168,6 +171,7 @@ export async function loadAll(userId) {
     pauses: pauseRows,
     blocks: blockRows,
     resets: resetRows,
+    bodyMetrics: bodyMetricRows,
   };
 }
 
@@ -452,6 +456,31 @@ export async function deleteExercise(userId, name, { workouts, sessions, resets 
   }
 
   return { changedWorkouts, changedSessions, removedResetIds };
+}
+
+// ── Bodyweight and waist tracking ───────────────────────────────────────────
+
+export async function saveBodyMetric(userId, entry) {
+  const row = {
+    id: entry.id || uid(),
+    user_id: userId,
+    measured_at: entry.measured_at,
+    weight_lb: entry.weight_lb ?? null,
+    waist_in: entry.waist_in ?? null,
+    notes: entry.notes || "",
+  };
+  const { data, error } = await supabase
+    .from("body_metrics")
+    .upsert(row, { onConflict: "user_id,id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteBodyMetric(userId, id) {
+  const { error } = await supabase.from("body_metrics").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
 }
 
 // ── Archiving ────────────────────────────────────────────────────────────────

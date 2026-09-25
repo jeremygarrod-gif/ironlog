@@ -20,6 +20,8 @@ import {
   deletePause,
   renameExercise,
   deleteExercise,
+  saveBodyMetric,
+  deleteBodyMetric,
   saveSession,
   saveTemplates,
   saveWeeklyTarget,
@@ -43,6 +45,7 @@ import Celebrate from "./screens/Celebrate.jsx";
 import Goals from "./screens/Goals.jsx";
 import Guide from "./screens/Guide.jsx";
 import { ArchiveList, NewBlock } from "./screens/Archive.jsx";
+import Tracking from "./screens/Tracking.jsx";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -451,6 +454,35 @@ export default function App() {
     }
   }
 
+  const needs005 = (e) =>
+    /body_metrics|relation|does not exist/i.test(e?.message || "")
+      ? "Run migration-005.sql in Supabase first, then try again."
+      : e?.message || "Something went wrong.";
+
+  async function upsertBodyMetric(entry) {
+    try {
+      const saved = await saveBodyMetric(userId, entry);
+      setData((d) => ({
+        ...d,
+        bodyMetrics: [saved, ...d.bodyMetrics.filter((x) => x.id !== saved.id)].sort(
+          (a, b) => new Date(b.measured_at) - new Date(a.measured_at)
+        ),
+      }));
+      flash("Saved.");
+    } catch (e) {
+      flash(needs005(e), "error");
+    }
+  }
+
+  async function removeBodyMetric(id) {
+    try {
+      await deleteBodyMetric(userId, id);
+      setData((d) => ({ ...d, bodyMetrics: d.bodyMetrics.filter((m) => m.id !== id) }));
+    } catch (e) {
+      flash(needs005(e), "error");
+    }
+  }
+
   function exportBackup() {
     const payload = buildBackup({
       schemes: data.schemes,
@@ -627,6 +659,16 @@ export default function App() {
 
     case "guide":
       return <Guide initialSection={route.section || null} onBack={back} />;
+
+    case "tracking":
+      return (
+        <Tracking
+          entries={data.bodyMetrics}
+          onSave={upsertBodyMetric}
+          onDelete={removeBodyMetric}
+          onBack={back}
+        />
+      );
 
     case "goals":
       return (

@@ -599,6 +599,40 @@ export const SECTIONS = [
   },
 
   {
+    id: "tracking",
+    title: "Body tracking",
+    summary: "Weight, waist, weekly averages and trend",
+    body: (
+      <>
+        <P>
+          <B>Body tracking</B> on the home screen. Log weight, waist, or both, as often as you like —
+          there's no requirement to log every day.
+        </P>
+        <H>Weekly averages</H>
+        <P>
+          Weeks run Monday to Sunday, the same as everywhere else in the app. A bulk or cut judged on
+          weekly average weight is comparing these numbers, not single daily readings, which move around
+          with water and food in your system far more than actual body composition does.
+        </P>
+        <H>Trend line</H>
+        <P>
+          The faint line is each individual reading; the solid line is a 7-entry moving average. Judge
+          direction from the solid line — a single rough morning shouldn't change your plan.
+        </P>
+        <H>Rate of change</H>
+        <P>
+          The difference between this week's average and last week's, in lb or inches per week. 30- and
+          90-day averages give the longer view.
+        </P>
+        <Muted>
+          Waist is tracked because it holds up better than weight alone as a fat-versus-water signal —
+          weight swings with hydration and food; waist moves more slowly and more honestly.
+        </Muted>
+      </>
+    ),
+  },
+
+  {
     id: "faq",
     title: "Common questions",
     summary: "Quick answers",
