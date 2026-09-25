@@ -6,3 +6,4 @@ dist
 ironlog.zip
 /ironlog/
 .claude/
+*.docx
