@@ -18,6 +18,8 @@ import {
   restoreWorkout,
   savePause,
   deletePause,
+  renameExercise,
+  deleteExercise,
   saveSession,
   saveTemplates,
   saveWeeklyTarget,
@@ -113,6 +115,15 @@ export default function App() {
     for (const w of data.workouts) for (const e of w.exercises || []) if (e.name) names.add(e.name);
     return [...names].sort();
   }, [data, library]);
+
+  // Body part chosen for a custom exercise, set once anywhere and remembered
+  // everywhere that name shows up in the picker
+  const exerciseCategories = useMemo(() => {
+    const map = {};
+    if (!data) return map;
+    for (const w of data.workouts) for (const e of w.exercises || []) if (e.name && e.category) map[e.name] = e.category;
+    return map;
+  }, [data]);
 
   function flash(text, tone = "ok") {
     setBanner({ text, tone });
@@ -251,6 +262,47 @@ export default function App() {
       home();
     } catch (e) {
       flash(e.message || "Could not save the workout.", "error");
+    }
+  }
+
+  async function renameExerciseEverywhere(oldName, newName) {
+    try {
+      const { changedWorkouts, changedSessions, changedResets } = await renameExercise(
+        userId,
+        oldName,
+        newName,
+        { workouts: data.workouts, sessions: data.sessions, resets: data.resets }
+      );
+      setData((d) => ({
+        ...d,
+        workouts: d.workouts.map((w) => changedWorkouts.find((c) => c.id === w.id) || w),
+        sessions: d.sessions.map((s) => changedSessions.find((c) => c.id === s.id) || s),
+        resets: d.resets.map((r) => changedResets.find((c) => c.id === r.id) || r),
+      }));
+      back();
+      flash(`Renamed to "${newName}".`);
+    } catch (e) {
+      flash(e.message || "Could not rename that exercise.", "error");
+    }
+  }
+
+  async function deleteExerciseEverywhere(name) {
+    try {
+      const { changedWorkouts, changedSessions, removedResetIds } = await deleteExercise(userId, name, {
+        workouts: data.workouts,
+        sessions: data.sessions,
+        resets: data.resets,
+      });
+      setData((d) => ({
+        ...d,
+        workouts: d.workouts.map((w) => changedWorkouts.find((c) => c.id === w.id) || w),
+        sessions: d.sessions.map((s) => changedSessions.find((c) => c.id === s.id) || s),
+        resets: d.resets.filter((r) => !removedResetIds.includes(r.id)),
+      }));
+      back();
+      flash(`Removed "${name}" from your library.`);
+    } catch (e) {
+      flash(e.message || "Could not remove that exercise.", "error");
     }
   }
 
@@ -482,6 +534,7 @@ export default function App() {
           schemes={data.schemes}
           templates={data.templates}
           allExerciseNames={allExerciseNames}
+          exerciseCategories={exerciseCategories}
           onSave={persistWorkout}
           onDelete={removeWorkout}
           onArchive={async (id) => {
@@ -638,6 +691,8 @@ export default function App() {
           resets={data.resets}
           onSaveReset={upsertReset}
           onDeleteReset={removeReset}
+          onRename={(newName) => renameExerciseEverywhere(route.exerciseName, newName)}
+          onDelete={() => deleteExerciseEverywhere(route.exerciseName)}
           onBack={back}
         />
       );

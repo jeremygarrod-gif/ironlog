@@ -403,7 +403,9 @@ export const SECTIONS = [
         <P>
           On the home screen. Lists every lift you've logged, across all your workouts. Tap one to see
           its <B>all-time PR</B>, its <B>baseline for stalls</B> with the option to reset it, and every
-          session you've done it.
+          session you've done it. <B>Rename</B> fixes a spelling everywhere at once — history, PRs and
+          all — instead of starting a new lift under the new name. <B>Delete</B> removes it from every
+          workout and session that mentions it, without touching anything else in those sessions.
         </P>
       </>
     ),

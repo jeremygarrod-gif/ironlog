@@ -333,6 +333,127 @@ export async function deleteReset(userId, id) {
   if (error) throw error;
 }
 
+// ── Rename or remove an exercise everywhere ─────────────────────────────────
+// Exercise names are free text stored on each workout and each historical
+// session rather than a lookup table, so a rename or delete has to be
+// rewritten into every row that mentions the old name, or PBs, streaks and
+// stall baselines would split in two (or hang onto a name nothing uses).
+
+export async function renameExercise(userId, oldName, newName, { workouts, sessions, resets = [] }) {
+  const renamed = (exercises) =>
+    (exercises || []).map((e) => (e.name === oldName ? { ...e, name: newName } : e));
+
+  const changedWorkouts = workouts
+    .filter((w) => (w.exercises || []).some((e) => e.name === oldName))
+    .map((w) => ({ ...w, exercises: renamed(w.exercises) }));
+
+  const changedSessions = sessions
+    .filter((s) => (s.exercises || []).some((e) => e.name === oldName))
+    .map((s) => ({ ...s, exercises: renamed(s.exercises) }));
+
+  const changedResets = resets
+    .filter((r) => r.exercise_name === oldName)
+    .map((r) => ({ ...r, exercise_name: newName }));
+
+  if (changedWorkouts.length) {
+    const rows = changedWorkouts.map((w) => ({
+      id: w.id,
+      user_id: userId,
+      name: w.name,
+      exercises: w.exercises,
+      notes: w.notes || "",
+      sort_order: w.sort_order ?? 0,
+      archived_at: w.archived_at ?? null,
+      archive_label: w.archive_label ?? null,
+    }));
+    const { error } = await supabase.from("workouts").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  if (changedSessions.length) {
+    const rows = changedSessions.map((s) => ({
+      id: s.id,
+      user_id: userId,
+      workout_id: s.workout_id,
+      workout_name: s.workout_name,
+      performed_at: s.performed_at,
+      notes: s.notes || "",
+      exercises: s.exercises,
+    }));
+    const { error } = await supabase.from("sessions").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  if (changedResets.length) {
+    const rows = changedResets.map((r) => ({
+      id: r.id,
+      user_id: userId,
+      exercise_name: r.exercise_name,
+      reset_date: r.reset_date,
+      reason: r.reason || "other",
+      notes: r.notes || "",
+    }));
+    const { error } = await supabase.from("exercise_resets").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  return { changedWorkouts, changedSessions, changedResets };
+}
+
+export async function deleteExercise(userId, name, { workouts, sessions, resets = [] }) {
+  const stripped = (exercises) => (exercises || []).filter((e) => e.name !== name);
+
+  const changedWorkouts = workouts
+    .filter((w) => (w.exercises || []).some((e) => e.name === name))
+    .map((w) => ({ ...w, exercises: stripped(w.exercises) }));
+
+  const changedSessions = sessions
+    .filter((s) => (s.exercises || []).some((e) => e.name === name))
+    .map((s) => ({ ...s, exercises: stripped(s.exercises) }));
+
+  const removedResetIds = resets.filter((r) => r.exercise_name === name).map((r) => r.id);
+
+  if (changedWorkouts.length) {
+    const rows = changedWorkouts.map((w) => ({
+      id: w.id,
+      user_id: userId,
+      name: w.name,
+      exercises: w.exercises,
+      notes: w.notes || "",
+      sort_order: w.sort_order ?? 0,
+      archived_at: w.archived_at ?? null,
+      archive_label: w.archive_label ?? null,
+    }));
+    const { error } = await supabase.from("workouts").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  if (changedSessions.length) {
+    const rows = changedSessions.map((s) => ({
+      id: s.id,
+      user_id: userId,
+      workout_id: s.workout_id,
+      workout_name: s.workout_name,
+      performed_at: s.performed_at,
+      notes: s.notes || "",
+      exercises: s.exercises,
+    }));
+    const { error } = await supabase.from("sessions").upsert(rows, { onConflict: "user_id,id" });
+    if (error) throw error;
+  }
+
+  if (removedResetIds.length) {
+    const { error } = await supabase
+      .from("exercise_resets")
+      .delete()
+      .eq("user_id", userId)
+      .in("id", removedResetIds);
+    if (error) throw error;
+  }
+
+  return { changedWorkouts, changedSessions, removedResetIds };
+}
+
 // ── Archiving ────────────────────────────────────────────────────────────────
 // Archiving never touches sessions. History stays attached to the archived
 // workout by id, and exercise history is keyed by name, so a lift's record

@@ -10,11 +10,17 @@ import {
   HelpLink,
 } from "../components.jsx";
 import { fmtPctRange, fmtReps, fmtRest, uid } from "../utils.js";
+import { CATEGORY_NAMES, EXERCISE_CATEGORIES } from "../exerciseSeed.js";
+
+function seedCategoryFor(name) {
+  return EXERCISE_CATEGORIES.find((g) => g.exercises.includes(name))?.category || "";
+}
 
 function blankExercise(schemes) {
   return {
     id: uid(),
     name: "",
+    category: null,
     schemeId: schemes[0]?.id,
     topSetWeight: 100,
     workingSets: [
@@ -29,6 +35,7 @@ export default function EditWorkout({
   schemes,
   templates,
   allExerciseNames,
+  exerciseCategories,
   onSave,
   onDelete,
   onArchive,
@@ -169,7 +176,26 @@ export default function EditWorkout({
                     value={ex.name}
                     onChange={(v) => upd(ex.id, { name: v })}
                     allNames={allExerciseNames}
+                    categoryMap={exerciseCategories}
                   />
+                </Field>
+
+                <Field label="Body part">
+                  <select
+                    style={S.select}
+                    value={ex.category || exerciseCategories?.[ex.name] || seedCategoryFor(ex.name)}
+                    onChange={(e) => upd(ex.id, { category: e.target.value })}
+                  >
+                    <option value="">Other</option>
+                    {CATEGORY_NAMES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ color: C.muted, fontSize: 11, marginTop: 5 }}>
+                    Used to group this exercise in the picker above.
+                  </div>
                 </Field>
 
                 <Field label="Warm-up scheme">

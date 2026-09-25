@@ -52,10 +52,28 @@ export function ExerciseDetail({
   resets = [],
   onSaveReset,
   onDeleteReset,
+  onRename,
+  onDelete,
   onBack,
 }) {
   const [draft, setDraft] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState(name);
+  const [deleteConfirming, setDeleteConfirming] = useState(false);
+
+  function saveRename() {
+    const trimmed = renameDraft.trim();
+    if (!trimmed || trimmed === name) {
+      setRenaming(false);
+      setRenameDraft(name);
+      return;
+    }
+    onRename(trimmed);
+  }
+
+  const sessionPhrase =
+    entries.length > 0 ? ` and ${entries.length} logged session${entries.length === 1 ? "" : "s"}` : "";
 
   const pr = allTimeBests(sessions, name);
   const bb = blockBest({ sessions, pauses, blocks, resets, name });
@@ -72,9 +90,69 @@ export function ExerciseDetail({
         <button style={S.btnBack} onClick={onBack}>
           ← Back
         </button>
-        <span style={S.headerTitle}>{name}</span>
+        <span style={S.headerTitle}>{renaming ? "Rename exercise" : name}</span>
         <span style={{ width: 40 }} />
       </div>
+
+      {onRename && onDelete && !renaming && !deleteConfirming && (
+        <div style={{ display: "flex", gap: 8, padding: "0 16px 14px" }}>
+          <button
+            style={{ ...S.btnGhost, flex: 1 }}
+            onClick={() => {
+              setRenameDraft(name);
+              setRenaming(true);
+            }}
+          >
+            Rename
+          </button>
+          <button
+            style={{ ...S.btnGhost, flex: 1, color: C.danger, borderColor: C.danger }}
+            onClick={() => setDeleteConfirming(true)}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+
+      {renaming && (
+        <div style={{ padding: "0 16px 14px" }}>
+          <input
+            style={S.textInput}
+            value={renameDraft}
+            autoFocus
+            onChange={(e) => setRenameDraft(e.target.value)}
+          />
+          <div style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>
+            Updates the name across {entries.length} logged session{entries.length === 1 ? "" : "s"} and
+            any workout that uses it.
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button style={{ ...S.btnPrimary, flex: 1 }} disabled={!renameDraft.trim()} onClick={saveRename}>
+              Save
+            </button>
+            <button
+              style={{ ...S.btnGhost, flex: 1 }}
+              onClick={() => {
+                setRenaming(false);
+                setRenameDraft(name);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirming && (
+        <div style={{ padding: "0 16px 14px" }}>
+          <Confirm
+            message={`Delete "${name}"? Removes it from any workout that uses it${sessionPhrase}. Everything else in those sessions is kept.`}
+            confirmLabel="Delete exercise"
+            onConfirm={() => onDelete(name)}
+            onCancel={() => setDeleteConfirming(false)}
+          />
+        </div>
+      )}
 
       {entries.length > 0 && (
         <div style={{ padding: "14px 16px 0", display: "grid", gap: 8 }}>
