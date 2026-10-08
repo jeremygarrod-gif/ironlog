@@ -121,7 +121,7 @@ export default function Goals({
             style={{
               ...S.card,
               borderColor: C.warn,
-              background: "#2a2010",
+              background: C.warnDim,
             }}
           >
             <div style={{ color: C.warn, fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
@@ -153,7 +153,7 @@ export default function Goals({
         )}
 
         {headline && confirmBlock !== headline.id && (
-          <div style={{ ...S.card, borderColor: "#2a4a2f" }}>
+          <div style={{ ...S.card, borderColor: C.accentLine }}>
             <div style={S.cardRow}>
               <div>
                 <div style={{ color: C.accent, fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5 }}>
@@ -415,7 +415,7 @@ export default function Goals({
                 ) : (
                   <>
                     <div style={S.cardRow}>
-                      <span style={{ ...S.setBadge, color: C.warn, background: "#2a2010" }}>
+                      <span style={{ ...S.setBadge, color: C.warn, background: C.warnDim }}>
                         {reasonLabel(p.reason)}
                       </span>
                       <div style={{ display: "flex", gap: 6 }}>

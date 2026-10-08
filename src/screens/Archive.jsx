@@ -79,7 +79,7 @@ export function NewBlock({ activeWorkouts, onConfirm, onBack }) {
                 textAlign: "left",
                 color: C.text,
                 font: "inherit",
-                borderColor: on ? "#2a4a2f" : C.border,
+                borderColor: on ? C.accentLine : C.border,
               }}
             >
               <span

@@ -2,9 +2,9 @@ import { C, S } from "../styles.js";
 import { describeE1rm, describeSet, isStalled, ordinal } from "../stall.js";
 
 const TONE = {
-  pb: { color: C.accent, bg: "#0a2e14", border: C.accent },
-  progress: { color: C.accent, bg: "#101c14", border: "#2a4a2f" },
-  streak: { color: C.warn, bg: "#2a2010", border: "#5a4520" },
+  pb: { color: C.accent, bg: C.hitBg, border: C.accent },
+  progress: { color: C.accent, bg: C.accentDim, border: C.accentLine },
+  streak: { color: C.warn, bg: C.warnDim, border: C.warnLine },
   milestone: { color: C.text, bg: C.sunken, border: C.border },
 };
 

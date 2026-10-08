@@ -81,7 +81,7 @@ const B = ({ children }) => <b style={{ color: C.text, fontWeight: 600 }}>{child
 const Chip = ({ tone, children }) => {
   const t = {
     hit: [C.hitBg, C.accent],
-    ok: ["#2a2010", C.warn],
+    ok: [C.warnDim, C.warn],
     miss: [C.missBg, C.danger],
     muted: [C.sunken, C.muted],
   }[tone];
@@ -715,7 +715,7 @@ export default function Guide({ initialSection, onBack }) {
               style={{
                 ...S.exCard,
                 scrollMarginTop: "calc(70px + env(safe-area-inset-top))",
-                borderColor: isOpen ? "#2a4a2f" : C.border,
+                borderColor: isOpen ? C.accentLine : C.border,
               }}
             >
               <button style={{ ...S.exHeader, alignItems: "flex-start" }} onClick={() => toggle(sec.id)}>
