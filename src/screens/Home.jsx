@@ -72,7 +72,7 @@ export default function Home({
 
       {isNew && !welcomeGone && (
         <div style={{ padding: "14px 16px 0" }}>
-          <div style={{ ...S.card, borderColor: "#2a4a2f", marginBottom: 0 }}>
+          <div style={{ ...S.card, borderColor: C.accentLine, marginBottom: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Welcome to IRONLOG</div>
             <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
               A two-minute read explains how everything works — what to tap at the gym, what the
@@ -102,7 +102,7 @@ export default function Home({
           <div
             style={{
               background: C.sunken,
-              border: `1px solid ${streaks.weekComplete ? "#2a4a2f" : C.border}`,
+              border: `1px solid ${streaks.weekComplete ? C.accentLine : C.border}`,
               borderRadius: 10,
               padding: "12px 14px",
             }}

@@ -793,7 +793,7 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
                     <input
                       style={{
                         ...S.repsInput,
-                        background: tone === "hit" ? C.hitBg : tone === "miss" ? C.missBg : "#1a1a1a",
+                        background: tone === "hit" ? C.hitBg : tone === "miss" ? C.missBg : C.sunken,
                       }}
                       type="number"
                       inputMode="numeric"
