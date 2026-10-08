@@ -74,12 +74,24 @@ export default function App() {
   // ── Data ───────────────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
     if (!session?.user) return;
-    try {
-      const d = await loadAll(session.user.id);
-      setData(d);
-      setLoadError(null);
-    } catch (e) {
-      setLoadError(e.message || "Could not load your data.");
+    // Right after sign-in, Supabase's servers can disagree by a moment about
+    // what time it is and reject a brand-new token as "issued at future".
+    // It passes a second later, so retry quietly instead of showing an error.
+    const clockSkew = (e) => /issued at future/i.test(e?.message || "");
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const d = await loadAll(session.user.id);
+        setData(d);
+        setLoadError(null);
+        return;
+      } catch (e) {
+        if (clockSkew(e) && attempt < 3) {
+          await new Promise((r) => setTimeout(r, 1200));
+          continue;
+        }
+        setLoadError(e.message || "Could not load your data.");
+        return;
+      }
     }
   }, [session]);
 
