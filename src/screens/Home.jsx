@@ -259,8 +259,8 @@ export default function Home({
       <div style={S.section}>
         <div style={S.sectionLabel}>DATA</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button style={S.btnGhost} onClick={onExport}>
-            ⬇ Export backup
+          <button style={S.btnGhost} onClick={() => go("export")}>
+            ⬇ Export &amp; share
           </button>
           <button style={S.btnGhost} onClick={() => fileRef.current?.click()}>
             ⬆ Import backup

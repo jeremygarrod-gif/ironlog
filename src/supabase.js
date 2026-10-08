@@ -638,7 +638,10 @@ export async function importBackup(userId, data) {
         schemeId: e.schemeId ?? e.scheme_id ?? null,
       })),
       notes: w.notes || "",
-      sort_order: i,
+      sort_order: w.sort_order ?? i,
+      // keep archived workouts archived on restore
+      archived_at: w.archived_at ?? null,
+      archive_label: w.archive_label ?? null,
     }));
     const { error } = await supabase.from("workouts").upsert(rows, { onConflict: "user_id,id" });
     if (error) throw error;
@@ -660,18 +663,68 @@ export async function importBackup(userId, data) {
     counts.sessions = rows.length;
   }
 
+  // Newer tables. Each restores independently, and a table that hasn't been
+  // created yet (its migration not run) is skipped rather than failing the lot.
+  const extras = [
+    ["pauses", data.pauses, (p) => ({ start_date: p.start_date, end_date: p.end_date, reason: p.reason || "other", notes: p.notes || "" })],
+    ["blocks", data.blocks, (b) => ({ start_date: b.start_date, label: b.label || "" })],
+    [
+      "exercise_resets",
+      data.resets,
+      (r) => ({ exercise_name: r.exercise_name, reset_date: r.reset_date, reason: r.reason || "other", notes: r.notes || "" }),
+    ],
+    [
+      "body_metrics",
+      data.bodyMetrics,
+      (m) => ({ measured_at: m.measured_at, weight_lb: m.weight_lb ?? null, waist_in: m.waist_in ?? null, notes: m.notes || "" }),
+    ],
+  ];
+  counts.skipped = [];
+  for (const [table, src, shape] of extras) {
+    if (!Array.isArray(src) || !src.length) continue;
+    const rows = src.map((x) => ({ id: x.id || uid(), user_id: userId, ...shape(x) }));
+    const { error } = await supabase.from(table).upsert(rows, { onConflict: "user_id,id" });
+    if (error) counts.skipped.push(table);
+    else counts[table] = rows.length;
+  }
+
+  if (data.weeklyTarget) {
+    const { error } = await supabase
+      .from("settings")
+      .upsert({ user_id: userId, weekly_target: data.weeklyTarget }, { onConflict: "user_id" });
+    if (error) counts.skipped.push("settings");
+  }
+
   return counts;
 }
 
 // ── Backup export ────────────────────────────────────────────────────────────
 
-export function buildBackup({ schemes, templates, workouts, sessions }) {
+// Version 3 adds everything that used to be left out — blocks, pauses,
+// baseline resets, body measurements and the weekly goal — so a restore brings
+// the whole app back, not just workouts and sessions.
+export function buildBackup({
+  schemes,
+  templates,
+  workouts,
+  sessions,
+  pauses = [],
+  blocks = [],
+  resets = [],
+  bodyMetrics = [],
+  weeklyTarget = null,
+}) {
   return {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     schemes,
     templates,
     workouts,
     sessions,
+    pauses,
+    blocks,
+    resets,
+    bodyMetrics,
+    weeklyTarget,
   };
 }

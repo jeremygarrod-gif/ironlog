@@ -46,6 +46,7 @@ import Goals from "./screens/Goals.jsx";
 import Guide from "./screens/Guide.jsx";
 import { ArchiveList, NewBlock } from "./screens/Archive.jsx";
 import Tracking from "./screens/Tracking.jsx";
+import Export from "./screens/Export.jsx";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -501,6 +502,11 @@ export default function App() {
       templates: data.templates,
       workouts: data.workouts,
       sessions: data.sessions,
+      pauses: data.pauses,
+      blocks: data.blocks,
+      resets: data.resets,
+      bodyMetrics: data.bodyMetrics,
+      weeklyTarget: data.weeklyTarget,
     });
     const text = JSON.stringify(payload, null, 2);
     try {
@@ -529,8 +535,15 @@ export default function App() {
         const parsed = JSON.parse(e.target.result);
         const counts = await importBackup(userId, parsed);
         await refresh();
+        const more = [
+          counts.body_metrics && `${counts.body_metrics} body entries`,
+          counts.blocks && `${counts.blocks} blocks`,
+          counts.pauses && `${counts.pauses} pauses`,
+        ].filter(Boolean);
         flash(
-          `Imported ${counts.sessions} sessions, ${counts.workouts} workouts, ${counts.templates} templates.`
+          `Imported ${counts.sessions} sessions, ${counts.workouts} workouts, ${counts.templates} templates` +
+            (more.length ? `, ${more.join(", ")}.` : ".") +
+            (counts.skipped?.length ? ` Skipped ${counts.skipped.join(", ")} — a database migration may be missing.` : "")
         );
       } catch (err) {
         flash(err.message || "That file couldn't be read.", "error");
@@ -671,6 +684,16 @@ export default function App() {
 
     case "guide":
       return <Guide initialSection={route.section || null} onBack={back} />;
+
+    case "export":
+      return (
+        <Export
+          data={{ ...data, weeklyTarget: data.weeklyTarget }}
+          onBackup={exportBackup}
+          onFlash={flash}
+          onBack={back}
+        />
+      );
 
     case "tracking":
       return (

@@ -577,20 +577,29 @@ export const SECTIONS = [
 
   {
     id: "backup",
-    title: "Backups",
-    summary: "A spare copy of everything",
+    title: "Export, backups and sharing",
+    summary: "A spare copy, or a summary to give an AI",
     body: (
       <>
         <P>
-          Your data is already safe in your account. A backup is a spare copy you keep yourself.
+          Your data is already safe in your account. <B>Export &amp; share</B> on the home screen gives
+          you two things:
         </P>
         <Points
           items={[
             <>
-              <B>Export backup</B> downloads everything as a file.
+              <B>Share with an AI</B> — a readable summary of your program, sessions, progress, notes and
+              body measurements. Pick how much history, then <B>Copy</B> it into a chat or use{" "}
+              <B>Share / save file</B>. It explains its own terms, so any AI model can follow it. Notes you
+              wrote are kept beside the numbers they explain.
             </>,
             <>
-              <B>Import backup</B> loads one back in. It adds and updates, and never deletes anything.
+              <B>Full backup</B> — everything in one file, including blocks, pauses, baselines and body
+              measurements. This is the spare copy to keep.
+            </>,
+            <>
+              <B>Import backup</B> loads a full backup back in. It adds and updates, and never deletes
+              anything.
             </>,
           ]}
         />
