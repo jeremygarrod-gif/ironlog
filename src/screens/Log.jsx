@@ -14,6 +14,7 @@ import {
   calcWtRange,
   dateInputToISO,
   fmtDate,
+  fmtDateShort,
   fmtPct,
   fmtPctRange,
   fmtReps,
@@ -496,8 +497,92 @@ function StallAlert({ alert, onAck }) {
   );
 }
 
+// One collapsible part of an exercise (last time, warm-ups, working sets).
+// While shut, a one-line summary stays visible so nothing is hidden outright.
+function SectionHeader({ label, open, onToggle, summary, refCb }) {
+  return (
+    <button
+      ref={refCb}
+      type="button"
+      aria-expanded={open}
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        background: "none",
+        border: "none",
+        borderBottom: `1px solid ${C.border}`,
+        padding: "12px 0 8px",
+        margin: "6px 0 10px",
+        color: C.text,
+        cursor: "pointer",
+        font: "inherit",
+        textAlign: "left",
+        scrollMarginTop: 72,
+      }}
+    >
+      <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.8, color: C.muted, whiteSpace: "nowrap" }}>
+        {label}
+      </span>
+      {!open && summary && (
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            color: C.muted,
+            fontSize: 12,
+            fontFamily: C.mono,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {summary}
+        </span>
+      )}
+      <span style={{ marginLeft: "auto", color: C.muted, fontSize: 12 }}>{open ? "▲" : "▼"}</span>
+    </button>
+  );
+}
+
 function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
   const scheme = schemes.find((s) => s.id === ex.schemeId);
+
+  // Which parts are shut is only about how the screen looks, so it lives here
+  // rather than in the saved draft
+  const [shut, setShut] = useState({});
+  const toggle = (key) => setShut((s) => ({ ...s, [key]: !s[key] }));
+  const cardRef = useRef(null);
+  const heads = useRef({});
+
+  // Collapsing from the bottom would otherwise leave you looking at whatever
+  // slid up into view; bring the thing you just shut back to the top instead.
+  const bringIntoView = (el) =>
+    requestAnimationFrame(() => el?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  function collapseSection(key) {
+    setShut((s) => ({ ...s, [key]: true }));
+    bringIntoView(heads.current[key]);
+  }
+  function collapseExercise() {
+    setEx(index, (e) => ({ ...e, expanded: false }));
+    bringIntoView(cardRef.current);
+  }
+
+  const setText = (ws) => `${ws.bodyweight ? "BW" : ws.weight}×${ws.reps || "–"}`;
+  const lastTop = ex.lastAny?.working?.find((w) => w.isTop);
+  const lastSummary = ex.lastAny
+    ? `${fmtDateShort(ex.lastAny.date)} · top ${lastTop ? `${lastTop.bodyweight || lastTop.weight === "BW" ? "BW" : lastTop.weight}×${lastTop.reps || "–"}` : "—"}${
+        ex.lastAny.notes || ex.lastThis?.notes ? " · has note" : ""
+      }`
+    : ex.lastThis
+    ? `${fmtDateShort(ex.lastThis.date)}${ex.lastThis.notes ? " · has note" : ""}`
+    : "";
+  const warmSummary = `${ex.warmups.length} set${ex.warmups.length === 1 ? "" : "s"} · ${ex.warmups
+    .map((w) => w.actualWt)
+    .join(", ")}`;
+  const workSummary = ex.workingSets.map(setText).join("  ·  ");
 
   function changeScheme(schemeId) {
     const sc = schemes.find((s) => s.id === schemeId);
@@ -553,7 +638,7 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
   }
 
   return (
-    <div style={S.exCard}>
+    <div ref={cardRef} style={{ ...S.exCard, scrollMarginTop: 72 }}>
       <button style={S.exHeader} onClick={() => setEx(index, (e) => ({ ...e, expanded: !e.expanded }))}>
         <span style={S.exName}>{ex.name}</span>
         <span style={S.exToggle}>{ex.expanded ? "▲" : "▼"}</span>
@@ -575,14 +660,28 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
               {ex.cue}
             </div>
           )}
-          {ex.lastAny && (
-            <LastSession
-              data={ex.lastAny}
-              label={ex.lastAny.sameWorkout ? "LAST TIME" : "LAST TIME (ANY WORKOUT)"}
-              withAdvice
-            />
+          {(ex.lastAny || ex.lastThis) && (
+            <>
+              <SectionHeader
+                label="LAST TIME"
+                open={!shut.last}
+                onToggle={() => toggle("last")}
+                summary={lastSummary}
+              />
+              {!shut.last && (
+                <>
+                  {ex.lastAny && (
+                    <LastSession
+                      data={ex.lastAny}
+                      label={ex.lastAny.sameWorkout ? "LAST TIME" : "LAST TIME (ANY WORKOUT)"}
+                      withAdvice
+                    />
+                  )}
+                  {ex.lastThis && <LastSession data={ex.lastThis} label="LAST TIME (THIS WORKOUT)" />}
+                </>
+              )}
+            </>
           )}
-          {ex.lastThis && <LastSession data={ex.lastThis} label="LAST TIME (THIS WORKOUT)" />}
 
           <div style={{ display: "flex", gap: 16, alignItems: "flex-end", margin: "12px 0 4px" }}>
             <Labeled label="Top set weight">
@@ -619,8 +718,17 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
             </select>
           </div>
 
-          {ex.warmups.length > 0 && <div style={S.subLabel}>WARM-UP SETS</div>}
-
+          {ex.warmups.length > 0 && (
+            <SectionHeader
+              label="WARM-UP SETS"
+              open={!shut.warm}
+              onToggle={() => toggle("warm")}
+              summary={warmSummary}
+              refCb={(el) => (heads.current.warm = el)}
+            />
+          )}
+          {(ex.warmups.length === 0 || !shut.warm) && (
+          <>
           {ex.warmups.map((w, wi) => {
             const actual = pctOfTop(w.actualWt, ex.topSetWeight);
             const { lo, hi } = normRange(w.pct);
@@ -700,11 +808,28 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
             );
           })}
 
-          <button style={{ ...S.btnAdd, fontSize: 12, padding: "6px 0" }} onClick={addWarmup}>
-            + Add warm-up set
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button style={{ ...S.btnAdd, fontSize: 12, padding: "6px 0" }} onClick={addWarmup}>
+              + Add warm-up set
+            </button>
+            {ex.warmups.length > 0 && (
+              <button style={{ ...S.btnXs, background: "none" }} onClick={() => collapseSection("warm")}>
+                ▲ Collapse
+              </button>
+            )}
+          </div>
+          </>
+          )}
 
-          <div style={S.subLabel}>WORKING SETS</div>
+          <SectionHeader
+            label="WORKING SETS"
+            open={!shut.work}
+            onToggle={() => toggle("work")}
+            summary={workSummary}
+            refCb={(el) => (heads.current.work = el)}
+          />
+          {!shut.work && (
+          <>
 
           {ex.workingSets.map((ws, si) => {
             const tone = repColor(ws.reps, ws.repRange);
@@ -898,9 +1023,16 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
             );
           })}
 
-          <button style={{ ...S.btnAdd, fontSize: 12, padding: "6px 0" }} onClick={addWorkingSet}>
-            + Add working set
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button style={{ ...S.btnAdd, fontSize: 12, padding: "6px 0" }} onClick={addWorkingSet}>
+              + Add working set
+            </button>
+            <button style={{ ...S.btnXs, background: "none" }} onClick={() => collapseSection("work")}>
+              ▲ Collapse
+            </button>
+          </div>
+          </>
+          )}
 
           <textarea
             style={S.notes}
@@ -908,6 +1040,13 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
             value={ex.notes}
             onChange={(e) => setEx(index, (x) => ({ ...x, notes: e.target.value }))}
           />
+
+          <button
+            style={{ ...S.btnGhost, width: "100%", marginTop: 12, color: C.muted, fontSize: 13 }}
+            onClick={collapseExercise}
+          >
+            ▲ Collapse {ex.name}
+          </button>
         </div>
       )}
     </div>

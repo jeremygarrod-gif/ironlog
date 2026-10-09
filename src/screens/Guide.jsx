@@ -263,6 +263,14 @@ export const SECTIONS = [
             </>,
           ]}
         />
+        <H>Keeping the screen short</H>
+        <P>
+          Tap an exercise's name to fold the whole thing away. Inside it, <B>Last time</B>,{" "}
+          <B>Warm-up sets</B> and <B>Working sets</B> each fold on their own — a one-line summary stays
+          visible while they're shut. Each section also has a <B>▲ Collapse</B> button at its bottom, and
+          the exercise has one at the very end, so you don't have to scroll back up. These only change how
+          the screen looks; nothing is deleted.
+        </P>
         <H>Changing things mid-workout</H>
         <P>
           You can switch an exercise's warm-up scheme, add or remove warm-up and working sets, or remove
@@ -607,6 +615,12 @@ export const SECTIONS = [
         <P>
           <B>Body tracking</B> on the home screen. Log weight, waist, or both, as often as you like —
           there's no requirement to log every day.
+        </P>
+        <H>Time period</H>
+        <P>
+          Pick <B>This month</B>, <B>3 months</B>, <B>6 months</B>, <B>1 year</B> or <B>All</B> to change what
+          the charts and the weekly averages cover. It's remembered next time. The smoothed line and the
+          rate of change always use all your readings, so they don't shift when you change the period.
         </P>
         <H>Weekly averages</H>
         <P>

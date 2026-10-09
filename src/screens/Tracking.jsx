@@ -47,7 +47,14 @@ function TrendChart({ points, unit }) {
           </text>
         ))}
         {labelIdx.map((i) => (
-          <text key={i} x={x(i)} y={H - 5} textAnchor="middle" fontSize="9" fill={C.muted}>
+          <text
+            key={i}
+            x={x(i)}
+            y={H - 5}
+            textAnchor={i === points.length - 1 ? "end" : i === 0 ? "start" : "middle"}
+            fontSize="9"
+            fill={C.muted}
+          >
             {fmtDateShort(points[i].date)}
           </text>
         ))}
@@ -96,7 +103,36 @@ function blankDraft() {
   return { id: null, measured_at: todayInputValue(), weight_lb: "", waist_in: "", notes: "" };
 }
 
+const RANGES = [
+  { id: "month", label: "This month" },
+  { id: "3m", label: "3 months", months: 3 },
+  { id: "6m", label: "6 months", months: 6 },
+  { id: "1y", label: "1 year", months: 12 },
+  { id: "all", label: "All" },
+];
+const RANGE_KEY = "ironlog:tracking-range";
+
+function rangeStart(id) {
+  const now = new Date();
+  if (id === "all") return null;
+  if (id === "month") return new Date(now.getFullYear(), now.getMonth(), 1);
+  const d = new Date(now);
+  d.setMonth(d.getMonth() - RANGES.find((r) => r.id === id).months);
+  return d;
+}
+
+function storedRange() {
+  try {
+    const v = localStorage.getItem(RANGE_KEY);
+    if (RANGES.some((r) => r.id === v)) return v;
+  } catch {
+    /* private browsing: just use the default */
+  }
+  return "3m";
+}
+
 export default function Tracking({ entries, onSave, onDelete, onBack }) {
+  const [rangeId, setRangeId] = useState(storedRange);
   const [draft, setDraft] = useState(blankDraft());
   const [editingId, setEditingId] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
@@ -131,11 +167,31 @@ export default function Tracking({ entries, onSave, onDelete, onBack }) {
     });
   }
 
-  const weekly = weeklyAverages(entries);
-  const weightTrend = smoothedTrend(entries, "weight_lb");
-  const waistTrend = smoothedTrend(entries, "waist_in");
-  const weightChange = rateOfChangePerWeek(weekly, "avgWeight");
-  const waistChange = rateOfChangePerWeek(weekly, "avgWaist");
+  function pickRange(id) {
+    setRangeId(id);
+    try {
+      localStorage.setItem(RANGE_KEY, id);
+    } catch {
+      /* it just won't be remembered */
+    }
+  }
+
+  // The averages and the smoothed line are worked out from everything you've
+  // logged, then trimmed to the chosen period, so the line doesn't wobble at
+  // the left edge just because earlier readings were cut off.
+  const start = rangeStart(rangeId);
+  const weeklyAll = weeklyAverages(entries);
+  const weekly = weeklyAll.filter((w) => {
+    if (!start) return true;
+    const end = new Date(`${w.week}T12:00:00`);
+    end.setDate(end.getDate() + 6);
+    return end >= start;
+  });
+  const inPeriod = (p) => !start || new Date(p.date) >= start;
+  const weightTrend = smoothedTrend(entries, "weight_lb").filter(inPeriod);
+  const waistTrend = smoothedTrend(entries, "waist_in").filter(inPeriod);
+  const weightChange = rateOfChangePerWeek(weeklyAll, "avgWeight");
+  const waistChange = rateOfChangePerWeek(weeklyAll, "avgWaist");
   const avg30 = longTermAverage(entries, "weight_lb", 30);
   const avg90 = longTermAverage(entries, "weight_lb", 90);
 
@@ -248,25 +304,58 @@ export default function Tracking({ entries, onSave, onDelete, onBack }) {
         </div>
       )}
 
-      {weightTrend.length >= 2 && (
+      {entries.length > 0 && (
+        <div style={{ padding: "14px 16px 0" }}>
+          <div style={S.inputLabel}>Show</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+            {RANGES.map((r) => (
+              <button
+                key={r.id}
+                style={{
+                  ...S.btnXs,
+                  padding: "7px 11px",
+                  fontSize: 13,
+                  color: rangeId === r.id ? C.accent : C.muted,
+                  borderColor: rangeId === r.id ? C.accent : C.border,
+                }}
+                onClick={() => pickRange(r.id)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {entries.some((e) => e.weight_lb != null) && (
         <div style={{ padding: "14px 16px 0" }}>
           <div style={S.card}>
             <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>
               WEIGHT TREND
             </div>
-            <TrendChart points={weightTrend} unit="lbs" />
-            <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>faint = daily · solid = 7-entry average</div>
+            {weightTrend.length >= 2 ? (
+              <>
+                <TrendChart points={weightTrend} unit="lbs" />
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>faint = daily · solid = 7-entry average</div>
+              </>
+            ) : (
+              <div style={{ color: C.muted, fontSize: 13 }}>Not enough readings in this period. Try a longer one.</div>
+            )}
           </div>
         </div>
       )}
 
-      {waistTrend.length >= 2 && (
+      {entries.some((e) => e.waist_in != null) && (
         <div style={{ padding: "14px 16px 0" }}>
           <div style={S.card}>
             <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 6 }}>
               WAIST TREND
             </div>
-            <TrendChart points={waistTrend} unit="in" />
+            {waistTrend.length >= 2 ? (
+              <TrendChart points={waistTrend} unit="in" />
+            ) : (
+              <div style={{ color: C.muted, fontSize: 13 }}>Not enough readings in this period. Try a longer one.</div>
+            )}
           </div>
         </div>
       )}
@@ -277,7 +366,7 @@ export default function Tracking({ entries, onSave, onDelete, onBack }) {
             <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: 1.5, color: C.muted, marginBottom: 8 }}>
               WEEKLY AVERAGES
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div style={{ overflow: "auto", maxHeight: 320 }}>
               <table style={S.table}>
                 <thead>
                   <tr>
@@ -289,7 +378,6 @@ export default function Tracking({ entries, onSave, onDelete, onBack }) {
                 <tbody>
                   {[...weekly]
                     .reverse()
-                    .slice(0, 8)
                     .map((w) => (
                       <tr key={w.week} style={{ borderTop: `1px solid ${C.border}` }}>
                         <td style={{ ...S.td, textAlign: "left", paddingLeft: 0, color: C.muted, fontSize: 11 }}>
