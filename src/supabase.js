@@ -115,6 +115,27 @@ export const DEFAULT_TEMPLATES = [
 
 // ── Loading ──────────────────────────────────────────────────────────────────
 
+// A table whose migration hasn't been run yet is *expected* to be missing, and
+// reads as empty. Anything else going wrong — a dropped connection, the
+// clock-skew rejection right after sign-in — must never pass for "no data":
+// that once showed an empty body-tracking list with every earlier entry still
+// safe in the database, and would silently skew stall alerts the same way.
+const isMissingTable = (e) =>
+  !!e &&
+  (e.code === "42P01" ||
+    e.code === "PGRST205" ||
+    /does not exist|could not find the table|schema cache/i.test(e.message || ""));
+
+async function optional(run) {
+  let res = await run();
+  if (res.error && !isMissingTable(res.error)) {
+    await new Promise((r) => setTimeout(r, 900));
+    res = await run();
+  }
+  if (res.error && !isMissingTable(res.error)) throw res.error;
+  return res;
+}
+
 export async function loadAll(userId) {
   const [schemes, templates, workouts, sessions, drafts, settings, pauses, blocks, resets, bodyMetrics] =
     await Promise.all([
@@ -123,25 +144,23 @@ export async function loadAll(userId) {
     supabase.from("workouts").select("*").order("sort_order"),
     supabase.from("sessions").select("*").order("performed_at", { ascending: false }),
     supabase.from("drafts").select("*"),
-    supabase.from("settings").select("*").maybeSingle(),
-    supabase.from("pauses").select("*").order("start_date", { ascending: false }),
-    supabase.from("blocks").select("*").order("start_date", { ascending: false }),
-    supabase.from("exercise_resets").select("*").order("reset_date", { ascending: false }),
-    supabase.from("body_metrics").select("*").order("measured_at", { ascending: false }),
+    optional(() => supabase.from("settings").select("*").maybeSingle()),
+    optional(() => supabase.from("pauses").select("*").order("start_date", { ascending: false })),
+    optional(() => supabase.from("blocks").select("*").order("start_date", { ascending: false })),
+    optional(() => supabase.from("exercise_resets").select("*").order("reset_date", { ascending: false })),
+    optional(() => supabase.from("body_metrics").select("*").order("measured_at", { ascending: false })),
   ]);
 
   const firstError =
     schemes.error || templates.error || workouts.error || sessions.error || drafts.error;
   if (firstError) throw firstError;
 
-  // settings and pauses arrive with migration 002; treat them as optional so an
-  // un-migrated database still loads rather than showing an error screen
+  // settings and pauses arrive with migration 002, blocks and resets with 004,
+  // body_metrics with 005. Until a migration is run its table reads as empty.
   const settingsRow = settings.error ? null : settings.data;
   const pauseRows = pauses.error ? [] : pauses.data || [];
-  // blocks and resets arrive with migration 004 — optional for the same reason
   const blockRows = blocks.error ? [] : blocks.data || [];
   const resetRows = resets.error ? [] : resets.data || [];
-  // body_metrics arrives with migration 005 — optional for the same reason
   const bodyMetricRows = bodyMetrics.error ? [] : bodyMetrics.data || [];
 
   let schemeRows = schemes.data || [];
