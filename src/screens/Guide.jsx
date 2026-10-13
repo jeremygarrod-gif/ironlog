@@ -263,6 +263,12 @@ export const SECTIONS = [
             </>,
           ]}
         />
+        <H>Finishing</H>
+        <P>
+          Tap <B>Finish</B> and the app asks you to confirm first, so a stray tap doesn't end the
+          workout. If a top set has no reps entered, it tells you which. If you finish by mistake, the
+          session can be reopened from History → <B>Edit</B>.
+        </P>
         <H>Keeping the screen short</H>
         <P>
           Tap an exercise's name to fold the whole thing away. Inside it, <B>Last time</B>,{" "}
@@ -404,7 +410,9 @@ export const SECTIONS = [
             </>,
             <>
               <B>Session log</B> — every session, each shown next to the previous time you did those
-              lifts, with the weight change. <B>Edit</B> fixes a mistyped number; <B>Delete</B> removes a
+              lifts, with the weight change. <B>Edit</B> opens that session on the same screen you logged
+              it on — warm-ups, working sets, notes and all — so you can fix a mistyped number or add a
+              forgotten note; nothing changes until you tap <B>Save changes</B>. <B>Delete</B> removes a
               session you didn't actually do.
             </>,
           ]}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { C, S, toneColor } from "../styles.js";
-import { Labeled, HelpLink } from "../components.jsx";
+import { Labeled, HelpLink, Modal } from "../components.jsx";
 import {
   compareToLast,
   describeDelta,
@@ -125,6 +125,83 @@ export function buildExerciseState(exDef, schemes, sessions, workoutId) {
   };
 }
 
+// The same state a live workout has, rebuilt from a session that was already
+// saved, so editing it looks and works exactly like logging it did. The
+// prescribed ranges come from the workout's current setup and scheme; every
+// number you actually entered comes from the saved session. "Last time" only
+// looks at sessions before this one.
+export function buildEditState(session, workout, schemes, priorSessions) {
+  return (session.exercises || []).map((se) => {
+    const def = (workout.exercises || []).find((e) => e.name === se.name) || {
+      id: uid(),
+      name: se.name,
+      schemeId: schemes[0]?.id,
+      topSetWeight: se.topSetWeight,
+      workingSets: (se.sets?.working || []).map((w) => ({
+        isTop: !!w.isTop,
+        repRange: w.repRange || [6, 9],
+        rest: w.isTop ? [180, 300] : [120, 150],
+        pctReduction: w.isTop ? null : [10, 15],
+      })),
+    };
+    const base = buildExerciseState(def, schemes, priorSessions, workout.id);
+    const topWt = parseFloat(se.topSetWeight) || base.topSetWeight;
+    const scheme = schemes.find((s) => s.id === def.schemeId);
+
+    const warmups = (se.sets?.warmups || []).map((w, i) => {
+      const wr = calcWtRange(topWt, w.pct);
+      return {
+        pct: w.pct,
+        reps: w.reps,
+        rest: scheme?.warmup_sets?.[i]?.rest ?? 60,
+        prescribedLo: wr.lo,
+        prescribedHi: wr.hi,
+        prescribedIsRange: wr.isRange,
+        actualWt: w.actualWt != null ? String(w.actualWt) : String(wr.lo),
+      };
+    });
+
+    const workingSets = (se.sets?.working || []).map((ws, i) => {
+      const proto = def.workingSets?.[i];
+      const bw = !!ws.bodyweight || ws.weight === "BW";
+      if (ws.isTop) {
+        return {
+          isTop: true,
+          repRange: ws.repRange,
+          rest: proto?.rest ?? [180, 300],
+          weight: ws.weight === "BW" || ws.weight == null ? String(topWt) : String(ws.weight),
+          reps: ws.reps ?? "",
+          bodyweight: bw,
+        };
+      }
+      const red = proto?.pctReduction || [10, 15];
+      const lo = round5(topWt * (1 - red[1] / 100));
+      const hi = round5(topWt * (1 - red[0] / 100));
+      return {
+        isTop: false,
+        repRange: ws.repRange,
+        rest: proto?.rest ?? [120, 150],
+        pctReduction: red,
+        rangeLo: lo,
+        rangeHi: hi,
+        weight: ws.weight === "BW" || ws.weight == null ? String(lo) : String(ws.weight),
+        reps: ws.reps ?? "",
+        bodyweight: bw,
+      };
+    });
+
+    return {
+      ...base,
+      topSetInput: String(se.topSetWeight ?? topWt),
+      topSetWeight: topWt,
+      warmups,
+      workingSets,
+      notes: se.notes || "",
+      stallAck: true,
+    };
+  });
+}
+
 // Recalculate prescribed weights after the top set changes. Manually overridden
 // actual weights are preserved; ones still sitting on the old prescribed value
 // follow along.
@@ -222,22 +299,31 @@ export default function Log({
   blocks,
   resets,
   draft,
+  editSession,
   onSaveDraft,
   onFinish,
   onBack,
 }) {
+  // Editing a finished session reuses this whole screen. It has no draft, no
+  // autosave and no stall pop-ups, and nothing is saved until you say so.
+  const editing = !!editSession;
   const [sessionDate, setSessionDate] = useState(
-    draft?.sessionDate ?? todayInputValue()
+    editing ? isoToDateInput(editSession.performed_at) : draft?.sessionDate ?? todayInputValue()
   );
-  const [notes, setNotes] = useState(draft?.notes ?? "");
+  const [notes, setNotes] = useState(editing ? editSession.notes || "" : draft?.notes ?? "");
   const [exs, setExs] = useState(
     () =>
+      (editing ? buildEditState(editSession, workout, schemes, sessions) : null) ??
       draft?.exs ??
       (workout.exercises || []).map((e) => buildExerciseState(e, schemes, sessions, workout.id))
   );
   const [saving, setSaving] = useState(false);
   const [stallAlert, setStallAlert] = useState(null);
+  const [confirmFinish, setConfirmFinish] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const firstRun = useRef(true);
+  const startedAs = useRef(null);
+  if (startedAs.current === null) startedAs.current = JSON.stringify({ sessionDate, notes, exs });
 
   // Autosave the draft, debounced so typing doesn't spam the database.
   //
@@ -254,6 +340,7 @@ export default function Log({
   saveRef.current = onSaveDraft;
 
   useEffect(() => {
+    if (editing) return;
     if (firstRun.current) {
       firstRun.current = false;
       return;
@@ -284,7 +371,7 @@ export default function Log({
   // survives leaving and resuming the draft.
   function checkStall(i) {
     const ex = exs[i];
-    if (!ex || ex.stallAck) return;
+    if (editing || !ex || ex.stallAck) return;
     const top = ex.workingSets.find((w) => w.isTop);
     if (!top || top.reps === "" || top.reps == null) return;
     const result = evaluateStall({
@@ -304,9 +391,9 @@ export default function Log({
 
   function buildSession() {
     return {
-      id: draft?.sessionId || uid(),
-      workout_id: workout.id,
-      workout_name: workout.name,
+      id: editing ? editSession.id : draft?.sessionId || uid(),
+      workout_id: editing ? editSession.workout_id : workout.id,
+      workout_name: editing ? editSession.workout_name : workout.name,
       performed_at: dateInputToISO(sessionDate),
       notes,
       exercises: exs.map((ex) => ({
@@ -339,17 +426,47 @@ export default function Log({
     setSaving(false);
   }
 
+  // A live workout asks first, since Finish ends it. Saving an edit is already
+  // a deliberate act, so it doesn't.
+  function requestFinish() {
+    if (editing) finish();
+    else setConfirmFinish(true);
+  }
+
+  const isDirty = () => JSON.stringify({ sessionDate, notes, exs }) !== startedAs.current;
+  function leave() {
+    if (editing && isDirty()) setConfirmLeave(true);
+    else onBack();
+  }
+
+  const noTopReps = exs.filter((e) => {
+    const t = e.workingSets.find((w) => w.isTop);
+    return t && (t.reps === "" || t.reps == null);
+  });
+
   return (
     <div style={S.screen}>
       <div style={S.header}>
-        <button style={S.btnBack} onClick={onBack}>
-          ← Save &amp; exit
+        <button style={S.btnBack} onClick={leave}>
+          {editing ? "← Cancel" : "← Save & exit"}
         </button>
         <span style={S.headerTitle}>{workout.name}</span>
-        <button style={S.btnPrimary} disabled={saving} onClick={finish}>
-          {saving ? "…" : "Finish"}
+        <button style={S.btnPrimary} disabled={saving} onClick={requestFinish}>
+          {saving ? "…" : editing ? "Save changes" : "Finish"}
         </button>
       </div>
+
+      {editing && (
+        <div style={{ padding: "12px 16px 0" }}>
+          <div style={{ ...S.panel, marginBottom: 0, borderLeft: `3px solid ${C.warn}` }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>Editing a past session</div>
+            <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.5, marginTop: 2 }}>
+              This is the session from {fmtDate(editSession.performed_at)}. Nothing changes until you tap{" "}
+              <b style={{ color: C.text }}>Save changes</b>.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ padding: "12px 16px 0" }}>
         <div style={{ float: "right", marginTop: 2 }}>
@@ -397,13 +514,56 @@ export default function Log({
       </div>
 
       <div style={{ padding: "8px 16px 40px" }}>
-        <button style={{ ...S.btnPrimary, width: "100%" }} disabled={saving} onClick={finish}>
-          {saving ? "Saving…" : "Finish session"}
+        <button style={{ ...S.btnPrimary, width: "100%" }} disabled={saving} onClick={requestFinish}>
+          {saving ? "Saving…" : editing ? "Save changes" : "Finish session"}
         </button>
         <div style={{ color: C.muted, fontSize: 11, textAlign: "center", marginTop: 10 }}>
-          Progress saves automatically — you can leave and come back.
+          {editing
+            ? "Changes are only saved when you tap Save changes."
+            : "Progress saves automatically — you can leave and come back."}
         </div>
       </div>
+
+      {confirmFinish && (
+        <Modal
+          title="Finish this workout?"
+          body={
+            <>
+              This saves the session and takes you to your summary. You can still edit it afterwards from
+              History.
+              {noTopReps.length > 0 && (
+                <div style={{ color: C.warn, marginTop: 10 }}>
+                  No reps entered for the top set of: {noTopReps.map((e) => e.name.trim()).join(", ")}.
+                </div>
+              )}
+            </>
+          }
+        >
+          <button
+            style={S.btnPrimary}
+            onClick={() => {
+              setConfirmFinish(false);
+              finish();
+            }}
+          >
+            Yes, finish workout
+          </button>
+          <button style={S.btnGhost} onClick={() => setConfirmFinish(false)}>
+            Keep going
+          </button>
+        </Modal>
+      )}
+
+      {confirmLeave && (
+        <Modal title="Discard your changes?" body="You've changed this session but haven't saved it.">
+          <button style={{ ...S.btnGhost, color: C.danger, borderColor: C.danger }} onClick={onBack}>
+            Discard changes
+          </button>
+          <button style={S.btnPrimary} onClick={() => setConfirmLeave(false)}>
+            Keep editing
+          </button>
+        </Modal>
+      )}
 
       {stallAlert && (
         <StallAlert

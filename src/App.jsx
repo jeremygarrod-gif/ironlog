@@ -248,6 +248,7 @@ export default function App() {
           .sort((a, b) => new Date(b.performed_at) - new Date(a.performed_at)),
       }));
       flash("Session updated.");
+      back();
     } catch (e) {
       flash(e.message || "Could not update the session.", "error");
     }
@@ -565,11 +566,42 @@ export default function App() {
         <History
           sessions={data.sessions.filter((s) => s.workout_id === route.workoutId)}
           workoutName={workout?.name || "History"}
-          onSaveSession={updateSession}
+          onEditSession={(s) => go("edit-session", { sessionId: s.id })}
           onDeleteSession={removeSession}
           onBack={back}
         />
       );
+
+    case "edit-session": {
+      const target = data.sessions.find((s) => s.id === route.sessionId);
+      if (!target) return <Splash text="Session not found." />;
+      // The workout may have been archived or deleted since; fall back to what
+      // the session itself recorded
+      const owner = data.workouts.find((w) => w.id === target.workout_id) || {
+        id: target.workout_id,
+        name: target.workout_name || "Workout",
+        exercises: [],
+      };
+      const before = data.sessions.filter(
+        (s) => s.id !== target.id && new Date(s.performed_at) < new Date(target.performed_at)
+      );
+      return (
+        <Log
+          key={target.id}
+          editSession={target}
+          workout={owner}
+          schemes={data.schemes}
+          sessions={before}
+          pauses={data.pauses}
+          blocks={data.blocks}
+          resets={data.resets}
+          draft={null}
+          onSaveDraft={() => {}}
+          onFinish={updateSession}
+          onBack={back}
+        />
+      );
+    }
 
     case "edit-workout":
       return (

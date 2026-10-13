@@ -77,11 +77,9 @@ function Chart({ points }) {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
-export default function History({ sessions, workoutName, onBack, onSaveSession, onDeleteSession }) {
+export default function History({ sessions, workoutName, onBack, onEditSession, onDeleteSession }) {
   const [view, setView] = useState("progress");
   const [openIdx, setOpenIdx] = useState(0);
-  const [editingId, setEditingId] = useState(null);
-  const [draft, setDraft] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
 
   const exNames = [];
@@ -148,8 +146,6 @@ export default function History({ sessions, workoutName, onBack, onSaveSession, 
 
           {view === "log" &&
             sessions.map((s, i) => {
-              const editing = editingId === s.id;
-              const shown = editing ? draft : s;
               return (
                 <div key={s.id} style={S.exCard}>
                   <button style={S.exHeader} onClick={() => setOpenIdx(openIdx === i ? -1 : i)}>
@@ -170,81 +166,22 @@ export default function History({ sessions, workoutName, onBack, onSaveSession, 
                         />
                       ) : (
                         <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-                          {!editing ? (
-                            <>
-                              <button
-                                style={S.btnSmall}
-                                onClick={() => {
-                                  setEditingId(s.id);
-                                  setDraft(JSON.parse(JSON.stringify(s)));
-                                }}
-                              >
-                                Edit
-                              </button>
-                              <button
-                                style={{ ...S.btnSmall, color: C.danger, borderColor: C.danger }}
-                                onClick={() => setConfirmId(s.id)}
-                              >
-                                Delete
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                style={S.btnPrimary}
-                                onClick={() => {
-                                  onSaveSession(draft);
-                                  setEditingId(null);
-                                  setDraft(null);
-                                }}
-                              >
-                                Save changes
-                              </button>
-                              <button
-                                style={S.btnGhost}
-                                onClick={() => {
-                                  setEditingId(null);
-                                  setDraft(null);
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            </>
-                          )}
+                          <button style={S.btnSmall} onClick={() => onEditSession(s)}>
+                            Edit
+                          </button>
+                          <button
+                            style={{ ...S.btnSmall, color: C.danger, borderColor: C.danger }}
+                            onClick={() => setConfirmId(s.id)}
+                          >
+                            Delete
+                          </button>
                         </div>
                       )}
 
-                      {editing ? (
-                        <textarea
-                          style={{ ...S.notes, marginTop: 0, marginBottom: 10 }}
-                          placeholder="Session notes…"
-                          value={shown.notes || ""}
-                          onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-                        />
-                      ) : (
-                        shown.notes && <div style={S.note}>{shown.notes}</div>
-                      )}
+                      {s.notes && <div style={S.note}>{s.notes}</div>}
 
-                      {(shown.exercises || []).map((ex, ei) => (
-                        <SessionExercise
-                          key={ei}
-                          ex={ex}
-                          editing={editing}
-                          allSessions={sessions}
-                          currentId={s.id}
-                          onChange={(fn) =>
-                            setDraft((d) => ({
-                              ...d,
-                              exercises: d.exercises.map((x, j) => (j === ei ? fn(x) : x)),
-                            }))
-                          }
-                          onRemove={() =>
-                            setDraft((d) => ({
-                              ...d,
-                              exercises: d.exercises.filter((_, j) => j !== ei),
-                            }))
-                          }
-                        />
+                      {(s.exercises || []).map((ex, ei) => (
+                        <SessionExercise key={ei} ex={ex} allSessions={sessions} currentId={s.id} />
                       ))}
                     </div>
                   )}
@@ -356,7 +293,7 @@ function ProgressCard({ name, sessions }) {
   );
 }
 
-function SessionExercise({ ex, editing, allSessions, currentId, onChange, onRemove }) {
+function SessionExercise({ ex, allSessions, currentId }) {
   // Most recent earlier session containing this lift, for side-by-side comparison
   const prevSession = allSessions.find(
     (s) => s.id !== currentId && (s.exercises || []).some((e) => e.name === ex.name)
@@ -369,78 +306,9 @@ function SessionExercise({ ex, editing, allSessions, currentId, onChange, onRemo
     <div style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <div style={{ fontWeight: 600 }}>{ex.name}</div>
-        {editing && (
-          <button style={{ ...S.btnXs, color: C.danger, borderColor: C.danger }} onClick={onRemove}>
-            Remove
-          </button>
-        )}
       </div>
 
-      {editing ? (
-        <>
-          {ex.sets.working.map((ws, wi) => {
-            const tone = repColor(ws.reps, ws.repRange);
-            return (
-              <div key={wi} style={{ display: "flex", gap: 8, alignItems: "center", padding: "4px 0", flexWrap: "wrap" }}>
-                <span style={S.setBadge}>{ws.isTop ? "TOP" : `S${wi + 1}`}</span>
-                {!ws.bodyweight && (
-                  <>
-                    <input
-                      style={{ ...S.wtInput, width: 74 }}
-                      type="number"
-                      inputMode="decimal"
-                      value={ws.weight}
-                      onChange={(e) =>
-                        onChange((x) => ({
-                          ...x,
-                          sets: {
-                            ...x.sets,
-                            working: x.sets.working.map((w, k) =>
-                              k === wi ? { ...w, weight: e.target.value } : w
-                            ),
-                          },
-                        }))
-                      }
-                    />
-                    <span style={S.unit}>lbs</span>
-                  </>
-                )}
-                {ws.bodyweight && (
-                  <span style={{ fontFamily: C.mono, color: C.accent, fontSize: 13 }}>Bodyweight</span>
-                )}
-                <input
-                  style={{
-                    ...S.repsInput,
-                    background: tone === "hit" ? C.hitBg : tone === "miss" ? C.missBg : C.sunken,
-                  }}
-                  type="number"
-                  inputMode="numeric"
-                  value={ws.reps || ""}
-                  onChange={(e) =>
-                    onChange((x) => ({
-                      ...x,
-                      sets: {
-                        ...x.sets,
-                        working: x.sets.working.map((w, k) =>
-                          k === wi ? { ...w, reps: e.target.value } : w
-                        ),
-                      },
-                    }))
-                  }
-                />
-                <span style={{ ...S.unit, fontSize: 11 }}>reps</span>
-              </div>
-            );
-          })}
-          <textarea
-            style={{ ...S.notes, minHeight: 40 }}
-            placeholder="Exercise notes…"
-            value={ex.notes || ""}
-            onChange={(e) => onChange((x) => ({ ...x, notes: e.target.value }))}
-          />
-        </>
-      ) : (
-        <>
+      <>
           <div style={{ overflowX: "auto" }}>
             <table style={S.table}>
               <thead>
@@ -515,8 +383,7 @@ function SessionExercise({ ex, editing, allSessions, currentId, onChange, onRemo
             </table>
           </div>
           {ex.notes && <div style={S.note}>{ex.notes}</div>}
-        </>
-      )}
+      </>
     </div>
   );
 }
