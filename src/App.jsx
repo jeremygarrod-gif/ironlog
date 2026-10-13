@@ -22,6 +22,8 @@ import {
   deleteExercise,
   saveBodyMetric,
   deleteBodyMetric,
+  saveCheckIn,
+  deleteCheckIn,
   saveSession,
   saveTemplates,
   saveWeeklyTarget,
@@ -46,6 +48,7 @@ import Goals from "./screens/Goals.jsx";
 import Guide from "./screens/Guide.jsx";
 import { ArchiveList, NewBlock } from "./screens/Archive.jsx";
 import Tracking from "./screens/Tracking.jsx";
+import CheckIn from "./screens/CheckIn.jsx";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -487,6 +490,35 @@ export default function App() {
     }
   }
 
+  const needs006 = (e) =>
+    /check_ins|relation|does not exist/i.test(e?.message || "")
+      ? "Run migration-006.sql in Supabase first, then try again."
+      : e?.message || "Something went wrong.";
+
+  async function upsertCheckIn(entry) {
+    try {
+      const saved = await saveCheckIn(userId, entry);
+      setData((d) => ({
+        ...d,
+        checkIns: [saved, ...d.checkIns.filter((x) => x.id !== saved.id)].sort(
+          (a, b) => new Date(b.checked_at) - new Date(a.checked_at)
+        ),
+      }));
+      flash("Saved.");
+    } catch (e) {
+      flash(needs006(e), "error");
+    }
+  }
+
+  async function removeCheckIn(id) {
+    try {
+      await deleteCheckIn(userId, id);
+      setData((d) => ({ ...d, checkIns: d.checkIns.filter((c) => c.id !== id) }));
+    } catch (e) {
+      flash(needs006(e), "error");
+    }
+  }
+
   async function removeBodyMetric(id) {
     try {
       await deleteBodyMetric(userId, id);
@@ -703,6 +735,17 @@ export default function App() {
 
     case "guide":
       return <Guide initialSection={route.section || null} onBack={back} />;
+
+    case "checkin":
+      return (
+        <CheckIn
+          entries={data.checkIns}
+          bodyMetrics={data.bodyMetrics}
+          onSave={upsertCheckIn}
+          onDelete={removeCheckIn}
+          onBack={back}
+        />
+      );
 
     case "tracking":
       return (

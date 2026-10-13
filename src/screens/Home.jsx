@@ -238,6 +238,9 @@ export default function Home({
           <button style={S.btnGhost} onClick={() => go("tracking")}>
             Body tracking
           </button>
+          <button style={S.btnGhost} onClick={() => go("checkin")}>
+            Check-in
+          </button>
         </div>
       </div>
 

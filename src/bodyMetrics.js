@@ -38,7 +38,9 @@ export function weeklyAverages(entries) {
 // field, so a single rough morning doesn't swing the line — the point of
 // tracking weekly average weight in the first place.
 export function smoothedTrend(entries, field, window = 7) {
-  const sorted = chronological(entries).filter((e) => e[field] != null);
+  const sorted = [...entries]
+    .filter((e) => e[field] != null)
+    .sort((a, b) => new Date(a.measured_at) - new Date(b.measured_at));
   return sorted.map((e, i) => {
     const slice = sorted.slice(Math.max(0, i - window + 1), i + 1);
     return {

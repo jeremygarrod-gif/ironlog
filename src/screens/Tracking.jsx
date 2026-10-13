@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { C, S } from "../styles.js";
-import { Confirm, Field, HelpLink } from "../components.jsx";
+import { Confirm, Field, HelpLink, PeriodPicker } from "../components.jsx";
 import { dateInputToISO, fmtDate, fmtDateShort, isoToDateInput, todayInputValue, uid } from "../utils.js";
 import { longTermAverage, rateOfChangePerWeek, smoothedTrend, weeklyAverages } from "../bodyMetrics.js";
+import { rangeStart, readRange, writeRange } from "../periods.js";
 
 function fmt1(n) {
   return n == null ? "—" : String(Math.round(n * 10) / 10);
@@ -12,14 +13,14 @@ function fmt1(n) {
 // smoothed line is what you actually judge progress on, not any one reading.
 // A reading with a note gets a bigger, tappable marker, so an outlier on the
 // line can be explained without leaving the chart.
-function TrendChart({ points, unit }) {
+export function TrendChart({ points, unit }) {
   const [activeIdx, setActiveIdx] = useState(null);
 
   if (points.length < 2) return null;
 
   const W = 320;
   const H = 104;
-  const PAD = { t: 8, b: 22, l: 34, r: 8 };
+  const PAD = { t: 8, b: 22, l: 38, r: 8 };
 
   const vals = points.flatMap((p) => [p.raw, p.smooth]).filter((v) => v != null);
   if (!vals.length) return null;
@@ -31,7 +32,9 @@ function TrendChart({ points, unit }) {
 
   const rawLine = points.map((p, i) => [x(i), y(p.raw)]);
   const smoothLine = points.map((p, i) => [x(i), y(p.smooth)]);
-  const ticks = [min, (min + max) / 2, max].map((v) => Math.round(v * 10) / 10);
+  // Whole numbers on a wide scale (steps), one decimal on a narrow one (lb, hours)
+  const step = max - min >= 50 ? 1 : 10;
+  const ticks = [min, (min + max) / 2, max].map((v) => Math.round(v * step) / step);
   const labelIdx = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])];
   const active = activeIdx != null ? points[activeIdx] : null;
 
@@ -88,7 +91,7 @@ function TrendChart({ points, unit }) {
         <span style={{ color: C.warn }}>●</span> has a note — tap to read it
       </div>
       {active && (
-        <div style={{ ...S.note, marginTop: 8 }}>
+        <div style={{ ...S.note, marginTop: 8, whiteSpace: "pre-wrap" }}>
           <div style={{ color: C.text, fontWeight: 600, marginBottom: 2 }}>
             {fmtDate(active.date)} · {fmt1(active.raw)} {unit}
           </div>
@@ -103,36 +106,10 @@ function blankDraft() {
   return { id: null, measured_at: todayInputValue(), weight_lb: "", waist_in: "", notes: "" };
 }
 
-const RANGES = [
-  { id: "month", label: "This month" },
-  { id: "3m", label: "3 months", months: 3 },
-  { id: "6m", label: "6 months", months: 6 },
-  { id: "1y", label: "1 year", months: 12 },
-  { id: "all", label: "All" },
-];
 const RANGE_KEY = "ironlog:tracking-range";
 
-function rangeStart(id) {
-  const now = new Date();
-  if (id === "all") return null;
-  if (id === "month") return new Date(now.getFullYear(), now.getMonth(), 1);
-  const d = new Date(now);
-  d.setMonth(d.getMonth() - RANGES.find((r) => r.id === id).months);
-  return d;
-}
-
-function storedRange() {
-  try {
-    const v = localStorage.getItem(RANGE_KEY);
-    if (RANGES.some((r) => r.id === v)) return v;
-  } catch {
-    /* private browsing: just use the default */
-  }
-  return "3m";
-}
-
 export default function Tracking({ entries, onSave, onDelete, onBack }) {
-  const [rangeId, setRangeId] = useState(storedRange);
+  const [rangeId, setRangeId] = useState(() => readRange(RANGE_KEY));
   const [draft, setDraft] = useState(blankDraft());
   const [editingId, setEditingId] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
@@ -169,11 +146,7 @@ export default function Tracking({ entries, onSave, onDelete, onBack }) {
 
   function pickRange(id) {
     setRangeId(id);
-    try {
-      localStorage.setItem(RANGE_KEY, id);
-    } catch {
-      /* it just won't be remembered */
-    }
+    writeRange(RANGE_KEY, id);
   }
 
   // The averages and the smoothed line are worked out from everything you've
@@ -304,28 +277,7 @@ export default function Tracking({ entries, onSave, onDelete, onBack }) {
         </div>
       )}
 
-      {entries.length > 0 && (
-        <div style={{ padding: "14px 16px 0" }}>
-          <div style={S.inputLabel}>Show</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-            {RANGES.map((r) => (
-              <button
-                key={r.id}
-                style={{
-                  ...S.btnXs,
-                  padding: "7px 11px",
-                  fontSize: 13,
-                  color: rangeId === r.id ? C.accent : C.muted,
-                  borderColor: rangeId === r.id ? C.accent : C.border,
-                }}
-                onClick={() => pickRange(r.id)}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {entries.length > 0 && <PeriodPicker value={rangeId} onChange={pickRange} />}
 
       {entries.some((e) => e.weight_lb != null) && (
         <div style={{ padding: "14px 16px 0" }}>

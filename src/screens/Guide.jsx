@@ -655,6 +655,36 @@ export const SECTIONS = [
   },
 
   {
+    id: "checkin",
+    title: "Check-in",
+    summary: "Steps, sleep, and notes on how you're feeling",
+    body: (
+      <>
+        <P>
+          <B>Check-in</B> on the home screen. Log it daily, weekly, or whenever you like — you can fill in
+          as much or as little as you want.
+        </P>
+        <H>Steps and sleep</H>
+        <P>
+          These are numbers, so they work like weight: a trend line with a 7-entry average, a weekly
+          average (Monday to Sunday), and the same time-period buttons. Your weekly waist average from
+          Body tracking sits beside them in the weekly table, so it all reads in one place.
+        </P>
+        <H>Notes</H>
+        <P>
+          <B>Hunger</B>, <B>energy</B>, <B>joints</B>, <B>wins</B> and <B>questions</B> are free-text notes
+          — there's no scoring to keep up with. If a day has any notes, its dot on the steps or sleep
+          chart turns amber; tap it to read them, which helps explain an odd day.
+        </P>
+        <Muted>
+          One check-in per day: picking a date that already has one opens it for editing instead of
+          creating a second.
+        </Muted>
+      </>
+    ),
+  },
+
+  {
     id: "faq",
     title: "Common questions",
     summary: "Quick answers",

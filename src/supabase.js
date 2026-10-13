@@ -137,7 +137,7 @@ async function optional(run) {
 }
 
 export async function loadAll(userId) {
-  const [schemes, templates, workouts, sessions, drafts, settings, pauses, blocks, resets, bodyMetrics] =
+  const [schemes, templates, workouts, sessions, drafts, settings, pauses, blocks, resets, bodyMetrics, checkIns] =
     await Promise.all([
     supabase.from("schemes").select("*").order("sort_order"),
     supabase.from("exercise_templates").select("*").order("sort_order"),
@@ -149,6 +149,7 @@ export async function loadAll(userId) {
     optional(() => supabase.from("blocks").select("*").order("start_date", { ascending: false })),
     optional(() => supabase.from("exercise_resets").select("*").order("reset_date", { ascending: false })),
     optional(() => supabase.from("body_metrics").select("*").order("measured_at", { ascending: false })),
+    optional(() => supabase.from("check_ins").select("*").order("checked_at", { ascending: false })),
   ]);
 
   const firstError =
@@ -162,6 +163,7 @@ export async function loadAll(userId) {
   const blockRows = blocks.error ? [] : blocks.data || [];
   const resetRows = resets.error ? [] : resets.data || [];
   const bodyMetricRows = bodyMetrics.error ? [] : bodyMetrics.data || [];
+  const checkInRows = checkIns.error ? [] : checkIns.data || [];
 
   let schemeRows = schemes.data || [];
   let templateRows = templates.data || [];
@@ -191,6 +193,7 @@ export async function loadAll(userId) {
     blocks: blockRows,
     resets: resetRows,
     bodyMetrics: bodyMetricRows,
+    checkIns: checkInRows,
   };
 }
 
@@ -499,6 +502,35 @@ export async function saveBodyMetric(userId, entry) {
 
 export async function deleteBodyMetric(userId, id) {
   const { error } = await supabase.from("body_metrics").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+}
+
+// ── Check-ins ────────────────────────────────────────────────────────────────
+
+export async function saveCheckIn(userId, entry) {
+  const row = {
+    id: entry.id || uid(),
+    user_id: userId,
+    checked_at: entry.checked_at,
+    steps: entry.steps ?? null,
+    sleep_hours: entry.sleep_hours ?? null,
+    hunger: entry.hunger || "",
+    energy: entry.energy || "",
+    joints: entry.joints || "",
+    wins: entry.wins || "",
+    questions: entry.questions || "",
+  };
+  const { data, error } = await supabase
+    .from("check_ins")
+    .upsert(row, { onConflict: "user_id,id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCheckIn(userId, id) {
+  const { error } = await supabase.from("check_ins").delete().eq("user_id", userId).eq("id", id);
   if (error) throw error;
 }
 
