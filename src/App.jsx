@@ -22,6 +22,8 @@ import {
   deleteExercise,
   saveBodyMetric,
   deleteBodyMetric,
+  saveCheckIn,
+  deleteCheckIn,
   saveSession,
   saveTemplates,
   saveWeeklyTarget,
@@ -29,7 +31,7 @@ import {
   signOut,
   supabase,
 } from "./supabase.js";
-import { buildExerciseLibrary, uid } from "./utils.js";
+import { buildExerciseLibrary, newestFirst, uid } from "./utils.js";
 import { useEdgeSwipeBack, useNavStack } from "./nav.js";
 import { computeAchievements, computeStreaks } from "./achievements.js";
 import { sessionStalls } from "./stall.js";
@@ -47,6 +49,7 @@ import Guide from "./screens/Guide.jsx";
 import { ArchiveList, NewBlock } from "./screens/Archive.jsx";
 import Tracking from "./screens/Tracking.jsx";
 import Export from "./screens/Export.jsx";
+import CheckIn from "./screens/CheckIn.jsx";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -203,14 +206,10 @@ export default function App() {
       setData((d) => {
         const drafts = { ...d.drafts };
         delete drafts[newSession.workout_id];
-        const sessions = [saved, ...d.sessions.filter((s) => s.id !== saved.id)].sort(
-          (a, b) => new Date(b.performed_at) - new Date(a.performed_at)
-        );
+        const sessions = [saved, ...d.sessions.filter((s) => s.id !== saved.id)].sort(newestFirst);
         return { ...d, sessions, drafts };
       });
-      const nextSessions = [saved, ...data.sessions.filter((s) => s.id !== saved.id)].sort(
-        (a, b) => new Date(b.performed_at) - new Date(a.performed_at)
-      );
+      const nextSessions = [saved, ...data.sessions.filter((s) => s.id !== saved.id)].sort(newestFirst);
       const { achievements } = computeAchievements({
         sessions: nextSessions,
         workouts: activeWorkouts,
@@ -244,11 +243,10 @@ export default function App() {
       const saved = await saveSession(userId, edited);
       setData((d) => ({
         ...d,
-        sessions: d.sessions
-          .map((s) => (s.id === saved.id ? saved : s))
-          .sort((a, b) => new Date(b.performed_at) - new Date(a.performed_at)),
+        sessions: d.sessions.map((s) => (s.id === saved.id ? saved : s)).sort(newestFirst),
       }));
       flash("Session updated.");
+      back();
     } catch (e) {
       flash(e.message || "Could not update the session.", "error");
     }
@@ -487,6 +485,35 @@ export default function App() {
     }
   }
 
+  const needs006 = (e) =>
+    /check_ins|relation|does not exist/i.test(e?.message || "")
+      ? "Run migration-006.sql in Supabase first, then try again."
+      : e?.message || "Something went wrong.";
+
+  async function upsertCheckIn(entry) {
+    try {
+      const saved = await saveCheckIn(userId, entry);
+      setData((d) => ({
+        ...d,
+        checkIns: [saved, ...d.checkIns.filter((x) => x.id !== saved.id)].sort(
+          (a, b) => new Date(b.checked_at) - new Date(a.checked_at)
+        ),
+      }));
+      flash("Saved.");
+    } catch (e) {
+      flash(needs006(e), "error");
+    }
+  }
+
+  async function removeCheckIn(id) {
+    try {
+      await deleteCheckIn(userId, id);
+      setData((d) => ({ ...d, checkIns: d.checkIns.filter((c) => c.id !== id) }));
+    } catch (e) {
+      flash(needs006(e), "error");
+    }
+  }
+
   async function removeBodyMetric(id) {
     try {
       await deleteBodyMetric(userId, id);
@@ -506,6 +533,7 @@ export default function App() {
       blocks: data.blocks,
       resets: data.resets,
       bodyMetrics: data.bodyMetrics,
+      checkIns: data.checkIns,
       weeklyTarget: data.weeklyTarget,
     });
     const text = JSON.stringify(payload, null, 2);
@@ -537,6 +565,7 @@ export default function App() {
         await refresh();
         const more = [
           counts.body_metrics && `${counts.body_metrics} body entries`,
+          counts.check_ins && `${counts.check_ins} check-ins`,
           counts.blocks && `${counts.blocks} blocks`,
           counts.pauses && `${counts.pauses} pauses`,
         ].filter(Boolean);
@@ -578,11 +607,42 @@ export default function App() {
         <History
           sessions={data.sessions.filter((s) => s.workout_id === route.workoutId)}
           workoutName={workout?.name || "History"}
-          onSaveSession={updateSession}
+          onEditSession={(s) => go("edit-session", { sessionId: s.id })}
           onDeleteSession={removeSession}
           onBack={back}
         />
       );
+
+    case "edit-session": {
+      const target = data.sessions.find((s) => s.id === route.sessionId);
+      if (!target) return <Splash text="Session not found." />;
+      // The workout may have been archived or deleted since; fall back to what
+      // the session itself recorded
+      const owner = data.workouts.find((w) => w.id === target.workout_id) || {
+        id: target.workout_id,
+        name: target.workout_name || "Workout",
+        exercises: [],
+      };
+      const before = data.sessions.filter(
+        (s) => s.id !== target.id && new Date(s.performed_at) < new Date(target.performed_at)
+      );
+      return (
+        <Log
+          key={target.id}
+          editSession={target}
+          workout={owner}
+          schemes={data.schemes}
+          sessions={before}
+          pauses={data.pauses}
+          blocks={data.blocks}
+          resets={data.resets}
+          draft={null}
+          onSaveDraft={() => {}}
+          onFinish={updateSession}
+          onBack={back}
+        />
+      );
+    }
 
     case "edit-workout":
       return (
@@ -691,6 +751,17 @@ export default function App() {
           data={{ ...data, weeklyTarget: data.weeklyTarget }}
           onBackup={exportBackup}
           onFlash={flash}
+          onBack={back}
+        />
+      );
+
+    case "checkin":
+      return (
+        <CheckIn
+          entries={data.checkIns}
+          bodyMetrics={data.bodyMetrics}
+          onSave={upsertCheckIn}
+          onDelete={removeCheckIn}
           onBack={back}
         />
       );

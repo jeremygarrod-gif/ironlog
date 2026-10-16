@@ -9,6 +9,7 @@
 
 import { allTimeBests, dayOf, describeE1rm, setScore } from "./stall.js";
 import { longTermAverage, rateOfChangePerWeek, weeklyAverages } from "./bodyMetrics.js";
+import { NOTE_FIELDS, weeklyCheckIns } from "./checkIns.js";
 
 export const RANGES = [
   { id: "4w", label: "Last 4 weeks", weeks: 4 },
@@ -179,8 +180,38 @@ function bodySection(entries, weeks) {
   return out;
 }
 
+function checkInSection(entries, bodyMetrics, weeks) {
+  const out = ["## Check-ins (steps, sleep and notes)", ""];
+  if (!entries.length) return [...out, "(none logged)", ""];
+  const all = weeklyCheckIns(entries, bodyMetrics);
+  const shown = weeks ? all.slice(-weeks) : all;
+  out.push("Weekly averages (per day; weeks run Monday–Sunday; waist comes from the body measurements above):", "");
+  out.push("| Week of | Avg steps/day | Avg sleep (h) | Avg waist (in) |", "|---|---|---|---|");
+  for (const w of shown)
+    out.push(
+      `| ${w.week} | ${w.steps != null ? Math.round(w.steps).toLocaleString("en-US") : "—"} | ${
+        w.sleep != null ? r1(w.sleep) : "—"
+      } | ${w.waist != null ? r1(w.waist) : "—"} |`
+    );
+  out.push("");
+  const cutoff = weeks ? Date.now() - weeks * 7 * 86400000 : 0;
+  const inRange = [...entries]
+    .filter((e) => new Date(e.checked_at).getTime() >= cutoff)
+    .sort((a, b) => new Date(a.checked_at) - new Date(b.checked_at));
+  out.push("Individual check-ins:");
+  for (const e of inRange) {
+    const nums = [];
+    if (e.steps != null) nums.push(`${Number(e.steps).toLocaleString("en-US")} steps`);
+    if (e.sleep_hours != null) nums.push(`${r1(Number(e.sleep_hours))} h sleep`);
+    out.push(`- ${dayOf(e.checked_at)}${nums.length ? `: ${nums.join(", ")}` : ""}`);
+    for (const f of NOTE_FIELDS) if (e[f.key]?.trim()) out.push(`  - ${f.label}: ${one(e[f.key])}`);
+  }
+  out.push("");
+  return out;
+}
+
 export function buildAiReport(data, weeks) {
-  const { workouts, sessions, schemes, blocks, pauses, resets, bodyMetrics, weeklyTarget } = data;
+  const { workouts, sessions, schemes, blocks, pauses, resets, bodyMetrics, weeklyTarget, checkIns = [] } = data;
   const cutoff = weeks ? Date.now() - weeks * 7 * 86400000 : 0;
   const ordered = [...sessions].sort((a, b) => new Date(b.performed_at) - new Date(a.performed_at));
   const inRange = ordered.filter((s) => new Date(s.performed_at).getTime() >= cutoff);
@@ -199,6 +230,7 @@ export function buildAiReport(data, weeks) {
     "- A session **beats the log** when its top-set e1RM is strictly higher than the best top set since the current baseline (start of the training block, or a per-exercise reset). A tie does not count. Three sessions in a row without beating the log is a **stall**. Only top sets are judged; back-offs are shown but never counted.",
     "- Deload and calibration weeks are excluded from stall counting. Injury, illness and travel pauses only protect streaks.",
     "- Lines marked NOTE are the lifter's own comments written at the time — read them before judging an unusual number.",
+    "- Check-ins record steps and sleep as numbers, plus free-text notes on hunger, energy, joints, wins and questions. Questions are things the lifter wants help with, so address any that are still open.",
     "",
   ];
 
@@ -209,5 +241,6 @@ export function buildAiReport(data, weeks) {
     ...progressSection(ordered, inRange),
     ...contextSection({ blocks, pauses, resets, weeklyTarget }),
     ...bodySection(bodyMetrics, weeks),
+    ...checkInSection(checkIns, bodyMetrics, weeks),
   ].join("\n");
 }

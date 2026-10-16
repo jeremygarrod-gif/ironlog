@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { C, S, toneColor } from "../styles.js";
-import { Labeled, HelpLink } from "../components.jsx";
+import { Labeled, HelpLink, Modal } from "../components.jsx";
 import {
   compareToLast,
   describeDelta,
@@ -14,6 +14,7 @@ import {
   calcWtRange,
   dateInputToISO,
   fmtDate,
+  fmtDateShort,
   fmtPct,
   fmtPctRange,
   fmtReps,
@@ -79,14 +80,12 @@ function buildWorkingSets(defs, topWt, prior) {
   });
 }
 
-export function buildExerciseState(exDef, schemes, sessions, workoutId) {
-  const scheme = schemes.find((s) => s.id === exDef.schemeId) || { warmup_sets: [] };
-
-  // Weights always follow the most recent time this lift was done, in any workout
-  const anyHit = findLastExercise(sessions, exDef.name);
-  const thisHit = findLastExercise(sessions, exDef.name, workoutId);
-
-  const topWt = anyHit?.exercise?.topSetWeight ?? exDef.topSetWeight ?? 100;
+// What the "Last time" panels show for a lift: the most recent time it was done
+// anywhere, and (if different) the last time in this workout. Kept separate so a
+// resumed workout can look these up again instead of trusting a stale copy.
+export function lastTimeFor(name, sessions, workoutId) {
+  const anyHit = findLastExercise(sessions, name);
+  const thisHit = findLastExercise(sessions, name, workoutId);
 
   const lastAny = anyHit
     ? {
@@ -108,6 +107,17 @@ export function buildExerciseState(exDef, schemes, sessions, workoutId) {
         }
       : null;
 
+  return { anyHit, lastAny, lastThis };
+}
+
+export function buildExerciseState(exDef, schemes, sessions, workoutId) {
+  const scheme = schemes.find((s) => s.id === exDef.schemeId) || { warmup_sets: [] };
+
+  // Weights always follow the most recent time this lift was done, in any workout
+  const { anyHit, lastAny, lastThis } = lastTimeFor(exDef.name, sessions, workoutId);
+
+  const topWt = anyHit?.exercise?.topSetWeight ?? exDef.topSetWeight ?? 100;
+
   return {
     key: exDef.id || uid(),
     name: exDef.name,
@@ -122,6 +132,83 @@ export function buildExerciseState(exDef, schemes, sessions, workoutId) {
     lastAny,
     lastThis,
   };
+}
+
+// The same state a live workout has, rebuilt from a session that was already
+// saved, so editing it looks and works exactly like logging it did. The
+// prescribed ranges come from the workout's current setup and scheme; every
+// number you actually entered comes from the saved session. "Last time" only
+// looks at sessions before this one.
+export function buildEditState(session, workout, schemes, priorSessions) {
+  return (session.exercises || []).map((se) => {
+    const def = (workout.exercises || []).find((e) => e.name === se.name) || {
+      id: uid(),
+      name: se.name,
+      schemeId: schemes[0]?.id,
+      topSetWeight: se.topSetWeight,
+      workingSets: (se.sets?.working || []).map((w) => ({
+        isTop: !!w.isTop,
+        repRange: w.repRange || [6, 9],
+        rest: w.isTop ? [180, 300] : [120, 150],
+        pctReduction: w.isTop ? null : [10, 15],
+      })),
+    };
+    const base = buildExerciseState(def, schemes, priorSessions, workout.id);
+    const topWt = parseFloat(se.topSetWeight) || base.topSetWeight;
+    const scheme = schemes.find((s) => s.id === def.schemeId);
+
+    const warmups = (se.sets?.warmups || []).map((w, i) => {
+      const wr = calcWtRange(topWt, w.pct);
+      return {
+        pct: w.pct,
+        reps: w.reps,
+        rest: scheme?.warmup_sets?.[i]?.rest ?? 60,
+        prescribedLo: wr.lo,
+        prescribedHi: wr.hi,
+        prescribedIsRange: wr.isRange,
+        actualWt: w.actualWt != null ? String(w.actualWt) : String(wr.lo),
+      };
+    });
+
+    const workingSets = (se.sets?.working || []).map((ws, i) => {
+      const proto = def.workingSets?.[i];
+      const bw = !!ws.bodyweight || ws.weight === "BW";
+      if (ws.isTop) {
+        return {
+          isTop: true,
+          repRange: ws.repRange,
+          rest: proto?.rest ?? [180, 300],
+          weight: ws.weight === "BW" || ws.weight == null ? String(topWt) : String(ws.weight),
+          reps: ws.reps ?? "",
+          bodyweight: bw,
+        };
+      }
+      const red = proto?.pctReduction || [10, 15];
+      const lo = round5(topWt * (1 - red[1] / 100));
+      const hi = round5(topWt * (1 - red[0] / 100));
+      return {
+        isTop: false,
+        repRange: ws.repRange,
+        rest: proto?.rest ?? [120, 150],
+        pctReduction: red,
+        rangeLo: lo,
+        rangeHi: hi,
+        weight: ws.weight === "BW" || ws.weight == null ? String(lo) : String(ws.weight),
+        reps: ws.reps ?? "",
+        bodyweight: bw,
+      };
+    });
+
+    return {
+      ...base,
+      topSetInput: String(se.topSetWeight ?? topWt),
+      topSetWeight: topWt,
+      warmups,
+      workingSets,
+      notes: se.notes || "",
+      stallAck: true,
+    };
+  });
 }
 
 // Recalculate prescribed weights after the top set changes. Manually overridden
@@ -221,22 +308,36 @@ export default function Log({
   blocks,
   resets,
   draft,
+  editSession,
   onSaveDraft,
   onFinish,
   onBack,
 }) {
+  // Editing a finished session reuses this whole screen. It has no draft, no
+  // autosave and no stall pop-ups, and nothing is saved until you say so.
+  const editing = !!editSession;
   const [sessionDate, setSessionDate] = useState(
-    draft?.sessionDate ?? todayInputValue()
+    editing ? isoToDateInput(editSession.performed_at) : draft?.sessionDate ?? todayInputValue()
   );
-  const [notes, setNotes] = useState(draft?.notes ?? "");
+  const [notes, setNotes] = useState(editing ? editSession.notes || "" : draft?.notes ?? "");
   const [exs, setExs] = useState(
     () =>
-      draft?.exs ??
+      (editing ? buildEditState(editSession, workout, schemes, sessions) : null) ??
+      // A resumed draft keeps everything you typed, but "last time" is looked up
+      // again, since it was frozen when the workout was first opened
+      draft?.exs?.map((e) => {
+        const { lastAny, lastThis } = lastTimeFor(e.name, sessions, workout.id);
+        return { ...e, lastAny, lastThis };
+      }) ??
       (workout.exercises || []).map((e) => buildExerciseState(e, schemes, sessions, workout.id))
   );
   const [saving, setSaving] = useState(false);
   const [stallAlert, setStallAlert] = useState(null);
+  const [confirmFinish, setConfirmFinish] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const firstRun = useRef(true);
+  const startedAs = useRef(null);
+  if (startedAs.current === null) startedAs.current = JSON.stringify({ sessionDate, notes, exs });
 
   // Autosave the draft, debounced so typing doesn't spam the database.
   //
@@ -253,6 +354,7 @@ export default function Log({
   saveRef.current = onSaveDraft;
 
   useEffect(() => {
+    if (editing) return;
     if (firstRun.current) {
       firstRun.current = false;
       return;
@@ -283,7 +385,7 @@ export default function Log({
   // survives leaving and resuming the draft.
   function checkStall(i) {
     const ex = exs[i];
-    if (!ex || ex.stallAck) return;
+    if (editing || !ex || ex.stallAck) return;
     const top = ex.workingSets.find((w) => w.isTop);
     if (!top || top.reps === "" || top.reps == null) return;
     const result = evaluateStall({
@@ -303,9 +405,9 @@ export default function Log({
 
   function buildSession() {
     return {
-      id: draft?.sessionId || uid(),
-      workout_id: workout.id,
-      workout_name: workout.name,
+      id: editing ? editSession.id : draft?.sessionId || uid(),
+      workout_id: editing ? editSession.workout_id : workout.id,
+      workout_name: editing ? editSession.workout_name : workout.name,
       performed_at: dateInputToISO(sessionDate),
       notes,
       exercises: exs.map((ex) => ({
@@ -338,17 +440,47 @@ export default function Log({
     setSaving(false);
   }
 
+  // A live workout asks first, since Finish ends it. Saving an edit is already
+  // a deliberate act, so it doesn't.
+  function requestFinish() {
+    if (editing) finish();
+    else setConfirmFinish(true);
+  }
+
+  const isDirty = () => JSON.stringify({ sessionDate, notes, exs }) !== startedAs.current;
+  function leave() {
+    if (editing && isDirty()) setConfirmLeave(true);
+    else onBack();
+  }
+
+  const noTopReps = exs.filter((e) => {
+    const t = e.workingSets.find((w) => w.isTop);
+    return t && (t.reps === "" || t.reps == null);
+  });
+
   return (
     <div style={S.screen}>
       <div style={S.header}>
-        <button style={S.btnBack} onClick={onBack}>
-          ← Save &amp; exit
+        <button style={S.btnBack} onClick={leave}>
+          {editing ? "← Cancel" : "← Save & exit"}
         </button>
         <span style={S.headerTitle}>{workout.name}</span>
-        <button style={S.btnPrimary} disabled={saving} onClick={finish}>
-          {saving ? "…" : "Finish"}
+        <button style={S.btnPrimary} disabled={saving} onClick={requestFinish}>
+          {saving ? "…" : editing ? "Save changes" : "Finish"}
         </button>
       </div>
+
+      {editing && (
+        <div style={{ padding: "12px 16px 0" }}>
+          <div style={{ ...S.panel, marginBottom: 0, borderLeft: `3px solid ${C.warn}` }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>Editing a past session</div>
+            <div style={{ color: C.muted, fontSize: 12, lineHeight: 1.5, marginTop: 2 }}>
+              This is the session from {fmtDate(editSession.performed_at)}. Nothing changes until you tap{" "}
+              <b style={{ color: C.text }}>Save changes</b>.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ padding: "12px 16px 0" }}>
         <div style={{ float: "right", marginTop: 2 }}>
@@ -396,13 +528,78 @@ export default function Log({
       </div>
 
       <div style={{ padding: "8px 16px 40px" }}>
-        <button style={{ ...S.btnPrimary, width: "100%" }} disabled={saving} onClick={finish}>
-          {saving ? "Saving…" : "Finish session"}
+        <button style={{ ...S.btnPrimary, width: "100%" }} disabled={saving} onClick={requestFinish}>
+          {saving ? "Saving…" : editing ? "Save changes" : "Finish session"}
         </button>
         <div style={{ color: C.muted, fontSize: 11, textAlign: "center", marginTop: 10 }}>
-          Progress saves automatically — you can leave and come back.
+          {editing
+            ? "Changes are only saved when you tap Save changes."
+            : "Progress saves automatically — you can leave and come back."}
         </div>
       </div>
+
+      {confirmFinish && (
+        <Modal
+          title="Finish this workout?"
+          body={
+            <>
+              This saves the session and takes you to your summary. You can still edit it afterwards from
+              History.
+              <div style={{ marginTop: 12 }}>
+                <div style={S.inputLabel}>Session date</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 4 }}>
+                  <input
+                    type="date"
+                    style={S.dateInput}
+                    value={sessionDate}
+                    onChange={(e) => setSessionDate(e.target.value)}
+                  />
+                  {sessionDate !== todayInputValue() && (
+                    <button style={S.btnXs} onClick={() => setSessionDate(todayInputValue())}>
+                      Use today
+                    </button>
+                  )}
+                </div>
+                {sessionDate !== todayInputValue() && (
+                  <div style={{ color: C.warn, marginTop: 6, fontSize: 12, lineHeight: 1.5 }}>
+                    Dated {fmtDate(dateInputToISO(sessionDate))}, not today. A workout keeps the day it was
+                    started, so check this is the day you actually trained.
+                  </div>
+                )}
+              </div>
+              {noTopReps.length > 0 && (
+                <div style={{ color: C.warn, marginTop: 10 }}>
+                  No reps entered for the top set of: {noTopReps.map((e) => e.name.trim()).join(", ")}.
+                </div>
+              )}
+            </>
+          }
+        >
+          <button
+            style={S.btnPrimary}
+            onClick={() => {
+              setConfirmFinish(false);
+              finish();
+            }}
+          >
+            Yes, finish workout
+          </button>
+          <button style={S.btnGhost} onClick={() => setConfirmFinish(false)}>
+            Keep going
+          </button>
+        </Modal>
+      )}
+
+      {confirmLeave && (
+        <Modal title="Discard your changes?" body="You've changed this session but haven't saved it.">
+          <button style={{ ...S.btnGhost, color: C.danger, borderColor: C.danger }} onClick={onBack}>
+            Discard changes
+          </button>
+          <button style={S.btnPrimary} onClick={() => setConfirmLeave(false)}>
+            Keep editing
+          </button>
+        </Modal>
+      )}
 
       {stallAlert && (
         <StallAlert
@@ -496,8 +693,92 @@ function StallAlert({ alert, onAck }) {
   );
 }
 
+// One collapsible part of an exercise (last time, warm-ups, working sets).
+// While shut, a one-line summary stays visible so nothing is hidden outright.
+function SectionHeader({ label, open, onToggle, summary, refCb }) {
+  return (
+    <button
+      ref={refCb}
+      type="button"
+      aria-expanded={open}
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        background: "none",
+        border: "none",
+        borderBottom: `1px solid ${C.border}`,
+        padding: "12px 0 8px",
+        margin: "6px 0 10px",
+        color: C.text,
+        cursor: "pointer",
+        font: "inherit",
+        textAlign: "left",
+        scrollMarginTop: 72,
+      }}
+    >
+      <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.8, color: C.muted, whiteSpace: "nowrap" }}>
+        {label}
+      </span>
+      {!open && summary && (
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            color: C.muted,
+            fontSize: 12,
+            fontFamily: C.mono,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {summary}
+        </span>
+      )}
+      <span style={{ marginLeft: "auto", color: C.muted, fontSize: 12 }}>{open ? "▲" : "▼"}</span>
+    </button>
+  );
+}
+
 function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
   const scheme = schemes.find((s) => s.id === ex.schemeId);
+
+  // Which parts are shut is only about how the screen looks, so it lives here
+  // rather than in the saved draft
+  const [shut, setShut] = useState({});
+  const toggle = (key) => setShut((s) => ({ ...s, [key]: !s[key] }));
+  const cardRef = useRef(null);
+  const heads = useRef({});
+
+  // Collapsing from the bottom would otherwise leave you looking at whatever
+  // slid up into view; bring the thing you just shut back to the top instead.
+  const bringIntoView = (el) =>
+    requestAnimationFrame(() => el?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  function collapseSection(key) {
+    setShut((s) => ({ ...s, [key]: true }));
+    bringIntoView(heads.current[key]);
+  }
+  function collapseExercise() {
+    setEx(index, (e) => ({ ...e, expanded: false }));
+    bringIntoView(cardRef.current);
+  }
+
+  const setText = (ws) => `${ws.bodyweight ? "BW" : ws.weight}×${ws.reps || "–"}`;
+  const lastTop = ex.lastAny?.working?.find((w) => w.isTop);
+  const lastSummary = ex.lastAny
+    ? `${fmtDateShort(ex.lastAny.date)} · top ${lastTop ? `${lastTop.bodyweight || lastTop.weight === "BW" ? "BW" : lastTop.weight}×${lastTop.reps || "–"}` : "—"}${
+        ex.lastAny.notes || ex.lastThis?.notes ? " · has note" : ""
+      }`
+    : ex.lastThis
+    ? `${fmtDateShort(ex.lastThis.date)}${ex.lastThis.notes ? " · has note" : ""}`
+    : "";
+  const warmSummary = `${ex.warmups.length} set${ex.warmups.length === 1 ? "" : "s"} · ${ex.warmups
+    .map((w) => w.actualWt)
+    .join(", ")}`;
+  const workSummary = ex.workingSets.map(setText).join("  ·  ");
 
   function changeScheme(schemeId) {
     const sc = schemes.find((s) => s.id === schemeId);
@@ -553,7 +834,7 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
   }
 
   return (
-    <div style={S.exCard}>
+    <div ref={cardRef} style={{ ...S.exCard, scrollMarginTop: 72 }}>
       <button style={S.exHeader} onClick={() => setEx(index, (e) => ({ ...e, expanded: !e.expanded }))}>
         <span style={S.exName}>{ex.name}</span>
         <span style={S.exToggle}>{ex.expanded ? "▲" : "▼"}</span>
@@ -575,14 +856,28 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
               {ex.cue}
             </div>
           )}
-          {ex.lastAny && (
-            <LastSession
-              data={ex.lastAny}
-              label={ex.lastAny.sameWorkout ? "LAST TIME" : "LAST TIME (ANY WORKOUT)"}
-              withAdvice
-            />
+          {(ex.lastAny || ex.lastThis) && (
+            <>
+              <SectionHeader
+                label="LAST TIME"
+                open={!shut.last}
+                onToggle={() => toggle("last")}
+                summary={lastSummary}
+              />
+              {!shut.last && (
+                <>
+                  {ex.lastAny && (
+                    <LastSession
+                      data={ex.lastAny}
+                      label={ex.lastAny.sameWorkout ? "LAST TIME" : "LAST TIME (ANY WORKOUT)"}
+                      withAdvice
+                    />
+                  )}
+                  {ex.lastThis && <LastSession data={ex.lastThis} label="LAST TIME (THIS WORKOUT)" />}
+                </>
+              )}
+            </>
           )}
-          {ex.lastThis && <LastSession data={ex.lastThis} label="LAST TIME (THIS WORKOUT)" />}
 
           <div style={{ display: "flex", gap: 16, alignItems: "flex-end", margin: "12px 0 4px" }}>
             <Labeled label="Top set weight">
@@ -619,8 +914,17 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
             </select>
           </div>
 
-          {ex.warmups.length > 0 && <div style={S.subLabel}>WARM-UP SETS</div>}
-
+          {ex.warmups.length > 0 && (
+            <SectionHeader
+              label="WARM-UP SETS"
+              open={!shut.warm}
+              onToggle={() => toggle("warm")}
+              summary={warmSummary}
+              refCb={(el) => (heads.current.warm = el)}
+            />
+          )}
+          {(ex.warmups.length === 0 || !shut.warm) && (
+          <>
           {ex.warmups.map((w, wi) => {
             const actual = pctOfTop(w.actualWt, ex.topSetWeight);
             const { lo, hi } = normRange(w.pct);
@@ -700,11 +1004,28 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
             );
           })}
 
-          <button style={{ ...S.btnAdd, fontSize: 12, padding: "6px 0" }} onClick={addWarmup}>
-            + Add warm-up set
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button style={{ ...S.btnAdd, fontSize: 12, padding: "6px 0" }} onClick={addWarmup}>
+              + Add warm-up set
+            </button>
+            {ex.warmups.length > 0 && (
+              <button style={{ ...S.btnXs, background: "none" }} onClick={() => collapseSection("warm")}>
+                ▲ Collapse
+              </button>
+            )}
+          </div>
+          </>
+          )}
 
-          <div style={S.subLabel}>WORKING SETS</div>
+          <SectionHeader
+            label="WORKING SETS"
+            open={!shut.work}
+            onToggle={() => toggle("work")}
+            summary={workSummary}
+            refCb={(el) => (heads.current.work = el)}
+          />
+          {!shut.work && (
+          <>
 
           {ex.workingSets.map((ws, si) => {
             const tone = repColor(ws.reps, ws.repRange);
@@ -898,9 +1219,16 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
             );
           })}
 
-          <button style={{ ...S.btnAdd, fontSize: 12, padding: "6px 0" }} onClick={addWorkingSet}>
-            + Add working set
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button style={{ ...S.btnAdd, fontSize: 12, padding: "6px 0" }} onClick={addWorkingSet}>
+              + Add working set
+            </button>
+            <button style={{ ...S.btnXs, background: "none" }} onClick={() => collapseSection("work")}>
+              ▲ Collapse
+            </button>
+          </div>
+          </>
+          )}
 
           <textarea
             style={S.notes}
@@ -908,6 +1236,13 @@ function ExerciseCard({ ex, index, schemes, setEx, onRemove, onTopSetLogged }) {
             value={ex.notes}
             onChange={(e) => setEx(index, (x) => ({ ...x, notes: e.target.value }))}
           />
+
+          <button
+            style={{ ...S.btnGhost, width: "100%", marginTop: 12, color: C.muted, fontSize: 13 }}
+            onClick={collapseExercise}
+          >
+            ▲ Collapse {ex.name}
+          </button>
         </div>
       )}
     </div>

@@ -2,6 +2,33 @@ import { useState } from "react";
 import { C, S } from "./styles.js";
 import { normRange } from "./utils.js";
 import { CATEGORY_NAMES, EXERCISE_CATEGORIES } from "./exerciseSeed.js";
+import { RANGES } from "./periods.js";
+
+// "Show: This month · 3 months · …" — the same picker on every trend screen
+export function PeriodPicker({ value, onChange }) {
+  return (
+    <div style={{ padding: "14px 16px 0" }}>
+      <div style={S.inputLabel}>Show</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+        {RANGES.map((r) => (
+          <button
+            key={r.id}
+            style={{
+              ...S.btnXs,
+              padding: "7px 11px",
+              fontSize: 13,
+              color: value === r.id ? C.accent : C.muted,
+              borderColor: value === r.id ? C.accent : C.border,
+            }}
+            onClick={() => onChange(r.id)}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function Field({ label, children }) {
   return (

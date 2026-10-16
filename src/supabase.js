@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { uid } from "./utils.js";
+import { newestFirst, uid } from "./utils.js";
 
 // These two values are safe to keep in the code. The anon key only grants the
 // access your Row Level Security policies allow, and those policies restrict
@@ -115,34 +115,55 @@ export const DEFAULT_TEMPLATES = [
 
 // ── Loading ──────────────────────────────────────────────────────────────────
 
+// A table whose migration hasn't been run yet is *expected* to be missing, and
+// reads as empty. Anything else going wrong — a dropped connection, the
+// clock-skew rejection right after sign-in — must never pass for "no data":
+// that once showed an empty body-tracking list with every earlier entry still
+// safe in the database, and would silently skew stall alerts the same way.
+const isMissingTable = (e) =>
+  !!e &&
+  (e.code === "42P01" ||
+    e.code === "PGRST205" ||
+    /does not exist|could not find the table|schema cache/i.test(e.message || ""));
+
+async function optional(run) {
+  let res = await run();
+  if (res.error && !isMissingTable(res.error)) {
+    await new Promise((r) => setTimeout(r, 900));
+    res = await run();
+  }
+  if (res.error && !isMissingTable(res.error)) throw res.error;
+  return res;
+}
+
 export async function loadAll(userId) {
-  const [schemes, templates, workouts, sessions, drafts, settings, pauses, blocks, resets, bodyMetrics] =
+  const [schemes, templates, workouts, sessions, drafts, settings, pauses, blocks, resets, bodyMetrics, checkIns] =
     await Promise.all([
     supabase.from("schemes").select("*").order("sort_order"),
     supabase.from("exercise_templates").select("*").order("sort_order"),
     supabase.from("workouts").select("*").order("sort_order"),
     supabase.from("sessions").select("*").order("performed_at", { ascending: false }),
     supabase.from("drafts").select("*"),
-    supabase.from("settings").select("*").maybeSingle(),
-    supabase.from("pauses").select("*").order("start_date", { ascending: false }),
-    supabase.from("blocks").select("*").order("start_date", { ascending: false }),
-    supabase.from("exercise_resets").select("*").order("reset_date", { ascending: false }),
-    supabase.from("body_metrics").select("*").order("measured_at", { ascending: false }),
+    optional(() => supabase.from("settings").select("*").maybeSingle()),
+    optional(() => supabase.from("pauses").select("*").order("start_date", { ascending: false })),
+    optional(() => supabase.from("blocks").select("*").order("start_date", { ascending: false })),
+    optional(() => supabase.from("exercise_resets").select("*").order("reset_date", { ascending: false })),
+    optional(() => supabase.from("body_metrics").select("*").order("measured_at", { ascending: false })),
+    optional(() => supabase.from("check_ins").select("*").order("checked_at", { ascending: false })),
   ]);
 
   const firstError =
     schemes.error || templates.error || workouts.error || sessions.error || drafts.error;
   if (firstError) throw firstError;
 
-  // settings and pauses arrive with migration 002; treat them as optional so an
-  // un-migrated database still loads rather than showing an error screen
+  // settings and pauses arrive with migration 002, blocks and resets with 004,
+  // body_metrics with 005. Until a migration is run its table reads as empty.
   const settingsRow = settings.error ? null : settings.data;
   const pauseRows = pauses.error ? [] : pauses.data || [];
-  // blocks and resets arrive with migration 004 — optional for the same reason
   const blockRows = blocks.error ? [] : blocks.data || [];
   const resetRows = resets.error ? [] : resets.data || [];
-  // body_metrics arrives with migration 005 — optional for the same reason
   const bodyMetricRows = bodyMetrics.error ? [] : bodyMetrics.data || [];
+  const checkInRows = checkIns.error ? [] : checkIns.data || [];
 
   let schemeRows = schemes.data || [];
   let templateRows = templates.data || [];
@@ -165,13 +186,14 @@ export async function loadAll(userId) {
     schemes: schemeRows,
     templates: templateRows,
     workouts: workouts.data || [],
-    sessions: sessions.data || [],
+    sessions: [...(sessions.data || [])].sort(newestFirst),
     drafts: draftMap,
     weeklyTarget: settingsRow?.weekly_target ?? null,
     pauses: pauseRows,
     blocks: blockRows,
     resets: resetRows,
     bodyMetrics: bodyMetricRows,
+    checkIns: checkInRows,
   };
 }
 
@@ -483,6 +505,35 @@ export async function deleteBodyMetric(userId, id) {
   if (error) throw error;
 }
 
+// ── Check-ins ────────────────────────────────────────────────────────────────
+
+export async function saveCheckIn(userId, entry) {
+  const row = {
+    id: entry.id || uid(),
+    user_id: userId,
+    checked_at: entry.checked_at,
+    steps: entry.steps ?? null,
+    sleep_hours: entry.sleep_hours ?? null,
+    hunger: entry.hunger || "",
+    energy: entry.energy || "",
+    joints: entry.joints || "",
+    wins: entry.wins || "",
+    questions: entry.questions || "",
+  };
+  const { data, error } = await supabase
+    .from("check_ins")
+    .upsert(row, { onConflict: "user_id,id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCheckIn(userId, id) {
+  const { error } = await supabase.from("check_ins").delete().eq("user_id", userId).eq("id", id);
+  if (error) throw error;
+}
+
 // ── Archiving ────────────────────────────────────────────────────────────────
 // Archiving never touches sessions. History stays attached to the archived
 // workout by id, and exercise history is keyed by name, so a lift's record
@@ -678,6 +729,20 @@ export async function importBackup(userId, data) {
       data.bodyMetrics,
       (m) => ({ measured_at: m.measured_at, weight_lb: m.weight_lb ?? null, waist_in: m.waist_in ?? null, notes: m.notes || "" }),
     ],
+    [
+      "check_ins",
+      data.checkIns,
+      (c) => ({
+        checked_at: c.checked_at,
+        steps: c.steps ?? null,
+        sleep_hours: c.sleep_hours ?? null,
+        hunger: c.hunger || "",
+        energy: c.energy || "",
+        joints: c.joints || "",
+        wins: c.wins || "",
+        questions: c.questions || "",
+      }),
+    ],
   ];
   counts.skipped = [];
   for (const [table, src, shape] of extras) {
@@ -701,8 +766,8 @@ export async function importBackup(userId, data) {
 // ── Backup export ────────────────────────────────────────────────────────────
 
 // Version 3 adds everything that used to be left out — blocks, pauses,
-// baseline resets, body measurements and the weekly goal — so a restore brings
-// the whole app back, not just workouts and sessions.
+// baseline resets, body measurements, check-ins and the weekly goal — so a
+// restore brings the whole app back, not just workouts and sessions.
 export function buildBackup({
   schemes,
   templates,
@@ -712,6 +777,7 @@ export function buildBackup({
   blocks = [],
   resets = [],
   bodyMetrics = [],
+  checkIns = [],
   weeklyTarget = null,
 }) {
   return {
@@ -725,6 +791,7 @@ export function buildBackup({
     blocks,
     resets,
     bodyMetrics,
+    checkIns,
     weeklyTarget,
   };
 }

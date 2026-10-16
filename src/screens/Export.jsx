@@ -71,8 +71,8 @@ export default function Export({ data, onBackup, onFlash, onBack }) {
         <div style={S.card}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>Share with an AI</div>
           <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, margin: "6px 0 14px" }}>
-            A readable summary of your program, sessions, progress, notes and body measurements, written so any AI
-            model can make sense of it. It explains its own terms, so you can paste it straight into a chat and
+            A readable summary of your program, sessions, progress, notes, body measurements and check-ins (steps,
+            sleep and your notes, questions included), written so any AI model can make sense of it. It explains its own terms, so you can paste it straight into a chat and
             start asking questions.
           </div>
 
@@ -135,7 +135,7 @@ export default function Export({ data, onBackup, onFlash, onBack }) {
             </pre>
           )}
           <div style={{ color: C.muted, fontSize: 11, lineHeight: 1.6, marginTop: 12 }}>
-            It includes your body measurements and notes, but not your email or account details. Only share it with
+            It includes your body measurements, check-ins and notes, but not your email or account details. Only share it with
             an AI service you're comfortable giving that information to.
           </div>
         </div>
@@ -143,7 +143,8 @@ export default function Export({ data, onBackup, onFlash, onBack }) {
         <div style={S.card}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>Full backup</div>
           <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6, margin: "6px 0 14px" }}>
-            Everything in one file — workouts, sessions, templates, blocks, pauses, baselines and body measurements.
+            Everything in one file — workouts, sessions, templates, blocks, pauses, baselines, body measurements and
+            check-ins.
             This is the one to keep for safety, and the only one you can import back. AI models can read it too, but
             it's long and technical, so the summary above works better in a chat.
           </div>

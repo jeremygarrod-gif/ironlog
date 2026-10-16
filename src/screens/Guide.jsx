@@ -263,6 +263,23 @@ export const SECTIONS = [
             </>,
           ]}
         />
+        <H>Finishing</H>
+        <P>
+          Tap <B>Finish</B> and the app asks you to confirm first, so a stray tap doesn't end the
+          workout. If a top set has no reps entered, it tells you which. It also shows the session's date
+          — a workout keeps the day it was <i>started</i>, so one opened on Wednesday and finished on
+          Thursday would be dated Wednesday. If that isn't right, change it there, or tap{" "}
+          <B>Use today</B>. If you finish by mistake, the session can be reopened from History →{" "}
+          <B>Edit</B>.
+        </P>
+        <H>Keeping the screen short</H>
+        <P>
+          Tap an exercise's name to fold the whole thing away. Inside it, <B>Last time</B>,{" "}
+          <B>Warm-up sets</B> and <B>Working sets</B> each fold on their own — a one-line summary stays
+          visible while they're shut. Each section also has a <B>▲ Collapse</B> button at its bottom, and
+          the exercise has one at the very end, so you don't have to scroll back up. These only change how
+          the screen looks; nothing is deleted.
+        </P>
         <H>Changing things mid-workout</H>
         <P>
           You can switch an exercise's warm-up scheme, add or remove warm-up and working sets, or remove
@@ -396,7 +413,9 @@ export const SECTIONS = [
             </>,
             <>
               <B>Session log</B> — every session, each shown next to the previous time you did those
-              lifts, with the weight change. <B>Edit</B> fixes a mistyped number; <B>Delete</B> removes a
+              lifts, with the weight change. <B>Edit</B> opens that session on the same screen you logged
+              it on — warm-ups, working sets, notes and all — so you can fix a mistyped number or add a
+              forgotten note; nothing changes until you tap <B>Save changes</B>. <B>Delete</B> removes a
               session you didn't actually do.
             </>,
           ]}
@@ -588,14 +607,14 @@ export const SECTIONS = [
         <Points
           items={[
             <>
-              <B>Share with an AI</B> — a readable summary of your program, sessions, progress, notes and
-              body measurements. Pick how much history, then <B>Copy</B> it into a chat or use{" "}
+              <B>Share with an AI</B> — a readable summary of your program, sessions, progress, notes, body
+              measurements and check-ins (your open questions are flagged for the AI to answer). Pick how much history, then <B>Copy</B> it into a chat or use{" "}
               <B>Share / save file</B>. It explains its own terms, so any AI model can follow it. Notes you
               wrote are kept beside the numbers they explain.
             </>,
             <>
-              <B>Full backup</B> — everything in one file, including blocks, pauses, baselines and body
-              measurements. This is the spare copy to keep.
+              <B>Full backup</B> — everything in one file, including blocks, pauses, baselines, body
+              measurements and check-ins. This is the spare copy to keep.
             </>,
             <>
               <B>Import backup</B> loads a full backup back in. It adds and updates, and never deletes
@@ -617,6 +636,12 @@ export const SECTIONS = [
           <B>Body tracking</B> on the home screen. Log weight, waist, or both, as often as you like —
           there's no requirement to log every day.
         </P>
+        <H>Time period</H>
+        <P>
+          Pick <B>This month</B>, <B>3 months</B>, <B>6 months</B>, <B>1 year</B> or <B>All</B> to change what
+          the charts and the weekly averages cover. It's remembered next time. The smoothed line and the
+          rate of change always use all your readings, so they don't shift when you change the period.
+        </P>
         <H>Weekly averages</H>
         <P>
           Weeks run Monday to Sunday, the same as everywhere else in the app. A bulk or cut judged on
@@ -636,6 +661,36 @@ export const SECTIONS = [
         <Muted>
           Waist is tracked because it holds up better than weight alone as a fat-versus-water signal —
           weight swings with hydration and food; waist moves more slowly and more honestly.
+        </Muted>
+      </>
+    ),
+  },
+
+  {
+    id: "checkin",
+    title: "Check-in",
+    summary: "Steps, sleep, and notes on how you're feeling",
+    body: (
+      <>
+        <P>
+          <B>Check-in</B> on the home screen. Log it daily, weekly, or whenever you like — you can fill in
+          as much or as little as you want.
+        </P>
+        <H>Steps and sleep</H>
+        <P>
+          These are numbers, so they work like weight: a trend line with a 7-entry average, a weekly
+          average (Monday to Sunday), and the same time-period buttons. Your weekly waist average from
+          Body tracking sits beside them in the weekly table, so it all reads in one place.
+        </P>
+        <H>Notes</H>
+        <P>
+          <B>Hunger</B>, <B>energy</B>, <B>joints</B>, <B>wins</B> and <B>questions</B> are free-text notes
+          — there's no scoring to keep up with. If a day has any notes, its dot on the steps or sleep
+          chart turns amber; tap it to read them, which helps explain an odd day.
+        </P>
+        <Muted>
+          One check-in per day: picking a date that already has one opens it for editing instead of
+          creating a second.
         </Muted>
       </>
     ),
