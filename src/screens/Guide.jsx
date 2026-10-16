@@ -266,8 +266,11 @@ export const SECTIONS = [
         <H>Finishing</H>
         <P>
           Tap <B>Finish</B> and the app asks you to confirm first, so a stray tap doesn't end the
-          workout. If a top set has no reps entered, it tells you which. If you finish by mistake, the
-          session can be reopened from History → <B>Edit</B>.
+          workout. If a top set has no reps entered, it tells you which. It also shows the session's date
+          — a workout keeps the day it was <i>started</i>, so one opened on Wednesday and finished on
+          Thursday would be dated Wednesday. If that isn't right, change it there, or tap{" "}
+          <B>Use today</B>. If you finish by mistake, the session can be reopened from History →{" "}
+          <B>Edit</B>.
         </P>
         <H>Keeping the screen short</H>
         <P>
