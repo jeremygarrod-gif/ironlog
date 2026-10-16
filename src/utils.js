@@ -117,6 +117,17 @@ export function fmtDateShort(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// Newest session first. A session keeps the date its workout was started, so
+// two can share one (a workout opened on Wednesday and finished on Thursday).
+// Ties go to whichever was saved later — otherwise "last time" can land on the
+// older of the two, since the database returns same-date rows in no set order.
+export function newestFirst(a, b) {
+  return (
+    new Date(b.performed_at) - new Date(a.performed_at) ||
+    new Date(b.created_at || 0) - new Date(a.created_at || 0)
+  );
+}
+
 // ── Derived exercise library ─────────────────────────────────────────────────
 // Built from sessions rather than stored, so edits and deletes can never
 // leave stale entries behind.

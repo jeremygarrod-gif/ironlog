@@ -31,7 +31,7 @@ import {
   signOut,
   supabase,
 } from "./supabase.js";
-import { buildExerciseLibrary, uid } from "./utils.js";
+import { buildExerciseLibrary, newestFirst, uid } from "./utils.js";
 import { useEdgeSwipeBack, useNavStack } from "./nav.js";
 import { computeAchievements, computeStreaks } from "./achievements.js";
 import { sessionStalls } from "./stall.js";
@@ -205,14 +205,10 @@ export default function App() {
       setData((d) => {
         const drafts = { ...d.drafts };
         delete drafts[newSession.workout_id];
-        const sessions = [saved, ...d.sessions.filter((s) => s.id !== saved.id)].sort(
-          (a, b) => new Date(b.performed_at) - new Date(a.performed_at)
-        );
+        const sessions = [saved, ...d.sessions.filter((s) => s.id !== saved.id)].sort(newestFirst);
         return { ...d, sessions, drafts };
       });
-      const nextSessions = [saved, ...data.sessions.filter((s) => s.id !== saved.id)].sort(
-        (a, b) => new Date(b.performed_at) - new Date(a.performed_at)
-      );
+      const nextSessions = [saved, ...data.sessions.filter((s) => s.id !== saved.id)].sort(newestFirst);
       const { achievements } = computeAchievements({
         sessions: nextSessions,
         workouts: activeWorkouts,
@@ -246,9 +242,7 @@ export default function App() {
       const saved = await saveSession(userId, edited);
       setData((d) => ({
         ...d,
-        sessions: d.sessions
-          .map((s) => (s.id === saved.id ? saved : s))
-          .sort((a, b) => new Date(b.performed_at) - new Date(a.performed_at)),
+        sessions: d.sessions.map((s) => (s.id === saved.id ? saved : s)).sort(newestFirst),
       }));
       flash("Session updated.");
       back();

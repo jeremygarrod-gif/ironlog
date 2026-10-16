@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { uid } from "./utils.js";
+import { newestFirst, uid } from "./utils.js";
 
 // These two values are safe to keep in the code. The anon key only grants the
 // access your Row Level Security policies allow, and those policies restrict
@@ -186,7 +186,7 @@ export async function loadAll(userId) {
     schemes: schemeRows,
     templates: templateRows,
     workouts: workouts.data || [],
-    sessions: sessions.data || [],
+    sessions: [...(sessions.data || [])].sort(newestFirst),
     drafts: draftMap,
     weeklyTarget: settingsRow?.weekly_target ?? null,
     pauses: pauseRows,
